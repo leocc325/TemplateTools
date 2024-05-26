@@ -119,8 +119,8 @@ namespace MetaUtility {
     }
 
     ///容器转换为字符串
-    template<typename T,template<typename...Element> class Array>
-    std::string convertArgToString(const Array<T>& array)
+    template<typename T,template<typename...Element> class Array,typename...Args>
+    std::string convertArgToString(const Array<T,Args...>& array)
     {
         std::string str;
         for(T item : array)
@@ -241,44 +241,67 @@ namespace MetaUtility {
 
     bool Test_StringConvertor()
     {
-        enum Arity{AA = 10,BB = 20};
-        std::list<int> lst = {1,2,3,4,5,6,7};
-        std::list<int,std::allocator<int>> lst2 = {1,2,3};
-        int lst3[5] = {2,4,6,8,10};
-        std::string s_1 = convertArgToString(true);
-        std::string s_2 = convertArgToString(char('a'));
-        std::string s_3 = convertArgToString(10);
-        std::string s_4 = convertArgToString(1.2);
-        const std::string s_5 = convertArgToString(AA);
-        std::string s_6 = convertArgToString(s_5);
-        std::string s_7 = convertArgToString("aaaaaaaaa");
-        Object* obj = new Object();
-        std::string s_8 = convertArgToString(obj);
-        std::string s_9 = convertArgToString(lst);
-        std::string s_10 = convertArgToString(lst2);
-        std::string s_11 = convertArgToString(lst3);
-        Arity num_e;
-        int num_1 = 0;
-        unsigned short num_2 = 0;
-        unsigned char num_3 = 0;
-        unsigned long  num_4 = 0;
-        bool num_5 = 0;
-        float num_6 = 0;
-        double num_7 = 0;
-        convertStringToArg("20",num_e);
-        convertStringToArg("-20",num_1);
-        convertStringToArg("20",num_2);
-        convertStringToArg("20",num_3);
-        convertStringToArg("20",num_4);
-        convertStringToArg("20",num_5);
-        convertStringToArg("20.5",num_6);
-        convertStringToArg("20.6",num_7);
-        int array[5] = {};
-        convertStringToArg(s_11,array);
+        enum EnumType{AA,BB,CC};
+        ///arg to string
+        EnumType type_enum = CC;
+        std::string str_001 = convertArgToString(type_enum);
+
+        bool type_bool = false;
+        std::string str_oo2 = convertArgToString(type_bool);
+
+        char type_char = 'a';
+        std::string str_003 = convertArgToString(type_char);
+
+        int type_int = -10;
+        std::string str_004 = convertArgToString(type_int);
+
+        unsigned int type_uint = 10;
+        std::string str_005 = convertArgToString(type_uint);
+
+        float type_float = 1.23;
+        std::string str_006 = convertArgToString(type_float);
+
+        double type_double = 2.34;
+        std::string str_007 = convertArgToString(type_double);
+
+        const char* type_charp = "hellow";
+        std::string str_008 = convertArgToString(type_charp);
+
+        std::string type_string = "hellow";
+        std::string str_009 = convertArgToString(type_string);
+
+        std::list<int> type_list = {0,1,2,3,4};
+        std::string str_010 = convertArgToString(type_list);
+
+        std::vector<int> type_vector = {2,3,4,5,6};
+        std::string str_011 = convertArgToString(type_vector);
+
+        int type_array[5] = {5,6,7,8,9};
+        std::string str_012 = convertArgToString(type_array);
+
+        QObject type_obj;
+        std::string str_013 = convertArgToString(&type_obj);
+
+        ///string to arg
+        EnumType to_enum;
+        bool to_bool;
+        int to_int;
+        unsigned int to_uint;
+        float to_float;
+        double to_double;
+        char* to_charp;
         return true;
     }
 
     /*
+    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
+    inline bool convertStringToArg(const QString& str,  T& arg)
+    {
+        //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
+        //查阅QMetaEnum源码的时候在fromType()函数中发现了QtPrivate::IsQEnumHelper<T>::Value这个模板
+        return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
+    }
+
     template<typename T>
     inline bool convertStringToEnum(std::true_type,const QString& str,  T& arg)
     {
