@@ -33,15 +33,11 @@ public:
 
     friend std::istream& operator >> (std::istream& is,Object& obj)
     {
-        std::string arrayString ;
-
-        is >> arrayString;
         is >> obj.objName >> obj.dataLength;
-
         return is;
     }
 
-private:
+public:
     std::string objName;
     unsigned dataLength;
 };
@@ -156,7 +152,7 @@ namespace MetaUtility {
 
     ///字符串转换为浮点型
     template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
-     void convertStringToArg(const std::string& str,T& arg)
+    void convertStringToArg(const std::string& str,T& arg)
     {
         arg = static_cast<T>(std::stold(str));
     }
@@ -164,7 +160,10 @@ namespace MetaUtility {
     ///字符串转换为char*
     void convertStringToArg(const std::string& str,char* arg)
     {
-        memcpy(arg,str.data(),str.length());
+        char* data = new char[str.length()];
+        memcpy(data,str.data(),str.length());
+
+        arg  = data;
     }
 
     ///字符串转换为class object pointer
@@ -176,26 +175,26 @@ namespace MetaUtility {
         in >> (*obj);
     }
 
-#ifdef QT_ENV
-    template<template<typename...> class Array,typename...Args>
+    #ifdef QT_ENV
+    template<template<typename...> class Array,typename T,typename...Args>
     constexpr static bool IsSequenceContainer =
-    std::is_same_v<Array<Args...>, std::list<Args...>> ||
-    std::is_same_v<Array<Args...>,std::vector<Args...>>||
-    std::is_same_v<Array<Args...>,std::deque<Args...>>||
-    std::is_same_v<Array<Args...>,QList<Args...>>||
-    std::is_same_v<Array<Args...>,QVector<Args...>>;
-#else
-    template<template<typename...> class Array,typename...Args>
+        std::is_same_v<Array<T,Args...>, std::list<T,Args...>> ||
+        std::is_same_v<Array<T,Args...>,std::vector<T,Args...>>||
+        std::is_same_v<Array<T,Args...>,std::deque<T,Args...>>||
+        std::is_same_v<Array<T>,QList<T>>||
+        std::is_same_v<Array<T>,QVector<T>>;
+    #else
+    template<template<typename...> class Array,typename T,typename...Args>
     constexpr static bool IsSequenceContainer =
-    std::is_same_v<Array<Args...>, std::list<Args...>> ||
-    std::is_same_v<Array<Args...>,std::vector<Args...>>||
-    std::is_same_v<Array<Args...>,std::deque<Args...>>;
-#endif
+        std::is_same_v<Array<T,Args...>, std::list<T,Args...>> ||
+        std::is_same_v<Array<T,Args...>,std::vector<T,Args...>>||
+        std::is_same_v<Array<T,Args...>,std::deque<T,Args...>>;
+    #endif
 
     ///字符串转换为容器
-    template<typename T,typename...Args,template<typename...> class Array>
-    inline typename std::enable_if<IsSequenceContainer<Array,T,Args...>,void>::type
-    convertStringToArg(const std::string& str, Array<T,Args...>& array)
+    template<typename T,typename...Args,template<typename...> class Array,
+    typename std::enable_if<IsSequenceContainer<Array,T,Args...>,Array<T,Args...>*>::type* = nullptr>
+    inline void convertStringToArg(const std::string& str, Array<T,Args...>& array)
     {
         std::list<std::string> stringList = split(str,spliter.data());
 
@@ -216,26 +215,34 @@ namespace MetaUtility {
         std::list<std::string> stringList = split(str,spliter.data());
 
         int index = 0;
-        for(auto item : stringList)
+        T value;
+        for(auto& item : stringList)
         {
             if(index < N)
-                convertArgToString(item,array[index]);
+            {
+                convertStringToArg(item,value);
+                array[index] = value;
+                index++;
+            }
         }
     }
 
     ///字符串转换为数组
     template<typename T,std::size_t N,typename std::enable_if<std::is_array<T>::value,T>::type* = nullptr>
-    inline void convertStringToArg(const std::string& str, T(&arg)[N])
+    inline void convertStringToArg(const std::string& str, T(&array)[N])
     {
         std::list<std::string> stringList = split(str,spliter.data());
         ///读取到的参数数量和当前容器的大小不匹配的时候不进行参数读取工作
         if ( stringList.size() != N )
             return;
 
-        T* ptr = arg;
-        for(auto item : stringList)
+        int index = 0;
+        T value;
+        for(auto& item : stringList)
         {
-            convertStringToArg(item,arg++);
+            convertStringToArg(item,value);
+            array[index] = value;
+            index++;
         }
     }
 
@@ -244,100 +251,139 @@ namespace MetaUtility {
         enum EnumType{AA,BB,CC};
         ///arg to string
         EnumType type_enum = CC;
-        std::string str_001 = convertArgToString(type_enum);
+        std::string str_enum = convertArgToString(type_enum);
 
         bool type_bool = false;
-        std::string str_oo2 = convertArgToString(type_bool);
+        std::string str_bool = convertArgToString(type_bool);
 
         char type_char = 'a';
-        std::string str_003 = convertArgToString(type_char);
+        std::string str_char = convertArgToString(type_char);
 
         int type_int = -10;
-        std::string str_004 = convertArgToString(type_int);
+        std::string str_int = convertArgToString(type_int);
 
         unsigned int type_uint = 10;
-        std::string str_005 = convertArgToString(type_uint);
+        std::string str_uint = convertArgToString(type_uint);
 
         float type_float = 1.23;
-        std::string str_006 = convertArgToString(type_float);
+        std::string str_float = convertArgToString(type_float);
 
         double type_double = 2.34;
-        std::string str_007 = convertArgToString(type_double);
+        std::string str_double = convertArgToString(type_double);
 
         const char* type_charp = "hellow";
-        std::string str_008 = convertArgToString(type_charp);
+        std::string str_charp = convertArgToString(type_charp);
 
         std::string type_string = "hellow";
-        std::string str_009 = convertArgToString(type_string);
+        std::string str_string = convertArgToString(type_string);
 
-        std::list<int> type_list = {0,1,2,3,4};
-        std::string str_010 = convertArgToString(type_list);
+        std::list<int> type_stdlist = {0,1,2,3,4};
+        std::string str_stdlist = convertArgToString(type_stdlist);
 
-        std::vector<int> type_vector = {2,3,4,5,6};
-        std::string str_011 = convertArgToString(type_vector);
+        std::vector<int> type_stdvector = {2,3,4,5,6};
+        std::string str_stdvector = convertArgToString(type_stdvector);
 
         int type_array[5] = {5,6,7,8,9};
-        std::string str_012 = convertArgToString(type_array);
+        std::string str_array = convertArgToString(type_array);
 
-        QObject type_obj;
-        std::string str_013 = convertArgToString(&type_obj);
+        Object type_obj;
+        type_obj.objName = "newName";
+        type_obj.dataLength = 20;
+        std::string str_obj = convertArgToString(&type_obj);
 
         ///string to arg
         EnumType to_enum;
+        convertStringToArg(str_enum,to_enum);
+
         bool to_bool;
+        convertStringToArg(str_bool,to_bool);
+
         int to_int;
+        convertStringToArg(str_int,to_int);
+
         unsigned int to_uint;
+        convertStringToArg(str_uint,to_uint);
+
         float to_float;
+        convertStringToArg(str_float,to_float);
+
         double to_double;
-        char* to_charp;
+        convertStringToArg(str_double,to_double);
+
+        char* to_charp = nullptr;
+        convertStringToArg(str_charp,to_charp);
+
+        std::list<int,std::allocator<int>> to_stdlist;
+        convertStringToArg(str_stdlist,to_stdlist);
+
+        std::vector<int> to_stdvector;
+        convertStringToArg(str_stdvector,to_stdvector);
+
+        std::array<int,5> to_stdarray;
+        convertStringToArg(str_array,to_stdarray);
+
+        std::deque<int> to_stddeque;
+        convertStringToArg(str_stdlist,to_stddeque);
+
+        QList<int> to_qlist;
+        convertStringToArg(str_stdlist,to_qlist);
+
+        QVector<int> to_qvector;
+        convertStringToArg(str_stdlist,to_qvector);
+
+        int to_array[5];
+        convertStringToArg(str_array,to_array);
+
+        Object to_obj;
+        convertStringToArg(str_obj,&to_obj);
         return true;
     }
 
     /*
-    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
-    inline bool convertStringToArg(const QString& str,  T& arg)
-    {
-        //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
-        //查阅QMetaEnum源码的时候在fromType()函数中发现了QtPrivate::IsQEnumHelper<T>::Value这个模板
-        return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
-    }
+        template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
+        inline bool convertStringToArg(const QString& str,  T& arg)
+        {
+            //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
+            //查阅QMetaEnum源码的时候在fromType()函数中发现了QtPrivate::IsQEnumHelper<T>::Value这个模板
+            return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
+        }
 
-    template<typename T>
-    inline bool convertStringToEnum(std::true_type,const QString& str,  T& arg)
-    {
-        //当枚举变量为QMetaEnum时，将字符串读取为枚举需要区分两种情况
-        //枚举转换为字符串的时候是没有区分枚举类型的，无论是QMetaEnum还是enum都被转换成了对应的数字，但是在字符串转换成QMetaEnum的时候存在两种情况
-        //一种是从xml中读取QMetaEnum，此时的字符串时纯数值类型的字符串，还有一种情况就是控制台或者SCPI命令中的QMetaEnum字符串，此时的字符串就是枚举变量名对应的字符串
-        //因此在处理QMetaEnum字符串的时候，要考虑到这两种情况，确保两种类型的QMetaEnum字符串都能被正确转换
-        //首先判断字符串是否只由正负号和数字组成，如果不是，再尝试通过QMetaEnum将其转换为枚举，如果转换失败，则返回false
-        QRegularExpression reg("^-?\\d*(\\.\\d+)?$");
-        if(reg.match(str).hasMatch())
+        template<typename T>
+        inline bool convertStringToEnum(std::true_type,const QString& str,  T& arg)
+        {
+            //当枚举变量为QMetaEnum时，将字符串读取为枚举需要区分两种情况
+            //枚举转换为字符串的时候是没有区分枚举类型的，无论是QMetaEnum还是enum都被转换成了对应的数字，但是在字符串转换成QMetaEnum的时候存在两种情况
+            //一种是从xml中读取QMetaEnum，此时的字符串时纯数值类型的字符串，还有一种情况就是控制台或者SCPI命令中的QMetaEnum字符串，此时的字符串就是枚举变量名对应的字符串
+            //因此在处理QMetaEnum字符串的时候，要考虑到这两种情况，确保两种类型的QMetaEnum字符串都能被正确转换
+            //首先判断字符串是否只由正负号和数字组成，如果不是，再尝试通过QMetaEnum将其转换为枚举，如果转换失败，则返回false
+            QRegularExpression reg("^-?\\d*(\\.\\d+)?$");
+            if(reg.match(str).hasMatch())
+            {
+                arg = static_cast<T>(str.toInt());
+                return true;
+            }
+            else
+            {
+                QMetaEnum meta = QMetaEnum::fromType<T>();
+                int ret = meta.keyToValue(str.toStdString().data());
+                if(ret != -1)
+                {
+                    arg = static_cast<T>(ret);
+                    return true;
+                }
+                else
+                    return false;
+            }
+        }
+
+        ///字符串转Enum
+        template<typename T>
+        inline bool convertStringToEnum(std::false_type,const QString& str,  T& arg)
         {
             arg = static_cast<T>(str.toInt());
             return true;
         }
-        else
-        {
-            QMetaEnum meta = QMetaEnum::fromType<T>();
-            int ret = meta.keyToValue(str.toStdString().data());
-            if(ret != -1)
-            {
-                arg = static_cast<T>(ret);
-                return true;
-            }
-            else
-                return false;
-        }
-    }
-
-    ///字符串转Enum
-    template<typename T>
-    inline bool convertStringToEnum(std::false_type,const QString& str,  T& arg)
-    {
-        arg = static_cast<T>(str.toInt());
-        return true;
-    }
-*/
+    */
 }
 
 #endif // STRINGCONVERTOR_H
