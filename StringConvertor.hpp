@@ -1,19 +1,14 @@
 #ifndef STRINGCONVERTOR_H
 #define STRINGCONVERTOR_H
 
-#define QT_ENV
-
 #include <string>
+#include <array>
+#include <vector>
 #include <list>
 #include <deque>
 #include <forward_list>
 #include <sstream>
 #include <type_traits>
-
-#ifdef QT_ENV
-#include <QList>
-#include <QVector>
-#endif
 
 class Object
 {
@@ -175,21 +170,11 @@ namespace MetaUtility {
         in >> (*obj);
     }
 
-    #ifdef QT_ENV
-    template<template<typename...> class Array,typename T,typename...Args>
-    constexpr static bool IsSequenceContainer =
-        std::is_same_v<Array<T,Args...>, std::list<T,Args...>> ||
-        std::is_same_v<Array<T,Args...>,std::vector<T,Args...>>||
-        std::is_same_v<Array<T,Args...>,std::deque<T,Args...>>||
-        std::is_same_v<Array<T>,QList<T>>||
-        std::is_same_v<Array<T>,QVector<T>>;
-    #else
     template<template<typename...> class Array,typename T,typename...Args>
     constexpr static bool IsSequenceContainer =
         std::is_same_v<Array<T,Args...>, std::list<T,Args...>> ||
         std::is_same_v<Array<T,Args...>,std::vector<T,Args...>>||
         std::is_same_v<Array<T,Args...>,std::deque<T,Args...>>;
-    #endif
 
     ///字符串转换为容器
     template<typename T,typename...Args,template<typename...> class Array,
@@ -325,12 +310,6 @@ namespace MetaUtility {
         std::deque<int> to_stddeque;
         convertStringToArg(str_stdlist,to_stddeque);
 
-        QList<int> to_qlist;
-        convertStringToArg(str_stdlist,to_qlist);
-
-        QVector<int> to_qvector;
-        convertStringToArg(str_stdlist,to_qvector);
-
         int to_array[5];
         convertStringToArg(str_array,to_array);
 
@@ -338,52 +317,6 @@ namespace MetaUtility {
         convertStringToArg(str_obj,&to_obj);
         return true;
     }
-
-    /*
-        template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
-        inline bool convertStringToArg(const QString& str,  T& arg)
-        {
-            //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
-            //查阅QMetaEnum源码的时候在fromType()函数中发现了QtPrivate::IsQEnumHelper<T>::Value这个模板
-            return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
-        }
-
-        template<typename T>
-        inline bool convertStringToEnum(std::true_type,const QString& str,  T& arg)
-        {
-            //当枚举变量为QMetaEnum时，将字符串读取为枚举需要区分两种情况
-            //枚举转换为字符串的时候是没有区分枚举类型的，无论是QMetaEnum还是enum都被转换成了对应的数字，但是在字符串转换成QMetaEnum的时候存在两种情况
-            //一种是从xml中读取QMetaEnum，此时的字符串时纯数值类型的字符串，还有一种情况就是控制台或者SCPI命令中的QMetaEnum字符串，此时的字符串就是枚举变量名对应的字符串
-            //因此在处理QMetaEnum字符串的时候，要考虑到这两种情况，确保两种类型的QMetaEnum字符串都能被正确转换
-            //首先判断字符串是否只由正负号和数字组成，如果不是，再尝试通过QMetaEnum将其转换为枚举，如果转换失败，则返回false
-            QRegularExpression reg("^-?\\d*(\\.\\d+)?$");
-            if(reg.match(str).hasMatch())
-            {
-                arg = static_cast<T>(str.toInt());
-                return true;
-            }
-            else
-            {
-                QMetaEnum meta = QMetaEnum::fromType<T>();
-                int ret = meta.keyToValue(str.toStdString().data());
-                if(ret != -1)
-                {
-                    arg = static_cast<T>(ret);
-                    return true;
-                }
-                else
-                    return false;
-            }
-        }
-
-        ///字符串转Enum
-        template<typename T>
-        inline bool convertStringToEnum(std::false_type,const QString& str,  T& arg)
-        {
-            arg = static_cast<T>(str.toInt());
-            return true;
-        }
-    */
 }
 
 #endif // STRINGCONVERTOR_H
