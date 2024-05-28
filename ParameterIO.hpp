@@ -1,6 +1,8 @@
 #ifndef PARAMETERIO_HPP
 #define PARAMETERIO_HPP
 
+#include "StringConvertorQ.hpp"
+
 #include <functional>
 
 #include <QMap>
@@ -11,6 +13,8 @@
 
 static const QString NodeType  = "Type";
 static const QString AttName = "arg";
+
+using namespace MetaUtility;
 
 class ParameterIOException:public std::exception
 {
@@ -71,9 +75,9 @@ private:
     static ParameterIO* instance;
     QFile m_TargetFile;
     QDomDocument m_Doc;
-    IOmode m_Mode;
-    int m_RecursionIndex;//递归索引，用于记录递归次数，并从xml节点中取出对应索引的值
-    QString m_CurrentObjName;//对象名,用于表示当前在操作哪一个对象的数据
+    IOmode m_Mode = {};
+    int m_RecursionIndex = {};//递归索引，用于记录递归次数，并从xml节点中取出对应索引的值
+    QString m_CurrentObjName = {};//对象名,用于表示当前在操作哪一个对象的数据
     QMap<QString,std::function<void()>> m_FuncMap;
 };
 
@@ -154,7 +158,9 @@ void ParameterIO::options(QString objName, Args&...args)
 template<typename...Args>
 void ParameterIO::registerArguments(const QString &objName, Args&...args)
 {
-    std::function<void()> func = std::bind(&ParameterIO::options,this,objName,std::forward<Args>(args)...);
+    std::function<void()> func = [&,objName](){
+        this->options(objName,args...);
+    };
     m_FuncMap.insert(objName,func);
 }
 
