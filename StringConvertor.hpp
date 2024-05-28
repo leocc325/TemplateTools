@@ -15,7 +15,7 @@ namespace MetaUtility {
     ///数组分隔符
     static std::string spliter("[SP]");
 
-    std::list<std::string> split(const std::string& input,const std::string& spliter)
+    inline std::list<std::string> split(const std::string& input,const std::string& spliter)
     {
         std::list<std::string> tokens;
         size_t startPos = 0;
@@ -39,21 +39,21 @@ namespace MetaUtility {
 
     ///数字量转换为string
     template<typename T,typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
-    std::string convertArgToString(const T arg)
+    inline std::string convertArgToString(const T arg)
     {
         return std::to_string(arg);
     }
 
     ///枚举转换为string
     template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr>
-    std::string convertArgToString(const T arg)
+    inline std::string convertArgToString(const T arg)
     {
         return std::to_string(arg);
     }
 
     ///string转换为string
     template<typename T,typename std::enable_if<std::is_same<std::string,T>::value,T>::type* = nullptr>
-    std::string convertArgToString(const T arg)
+    inline std::string convertArgToString(const T arg)
     {
         return arg;
     }
@@ -64,7 +64,7 @@ namespace MetaUtility {
 
     ///char*转换为string
     template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type* = nullptr>
-    std::string convertArgToString(const T arg)
+    inline std::string convertArgToString(const T arg)
     {
         return std::string(arg);
     }
@@ -75,7 +75,7 @@ namespace MetaUtility {
 
     ///class object pointer转换为string
     template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type* = nullptr>
-    std::string convertArgToString(const T obj)
+    inline std::string convertArgToString(const T obj)
     {
         std::stringstream ss;
         ss << (*obj);
@@ -84,7 +84,7 @@ namespace MetaUtility {
 
     ///容器转换为字符串
     template<typename T,template<typename...Element> class Array,typename...Args>
-    std::string convertArgToString(const Array<T,Args...>& array)
+    inline std::string convertArgToString(const Array<T,Args...>& array)
     {
         std::string str;
         for(T item : array)
@@ -97,7 +97,7 @@ namespace MetaUtility {
 
     ///数组转换为字符串
     template<size_t N,typename T>
-    std::string convertArgToString(const T(&array)[N])
+    inline std::string convertArgToString(const T(&array)[N])
     {
         std::string str;
         for(T item : array)
@@ -113,20 +113,20 @@ namespace MetaUtility {
 
     ///字符串转换为整数
     template <typename T,typename std::enable_if<IsIntegral<T>,int>::type* = nullptr>
-    void convertStringToArg(const std::string& str,T& arg)
+    inline void convertStringToArg(const std::string& str,T& arg)
     {
         arg = static_cast<T>(std::stoll(str));
     }
 
     ///字符串转换为浮点型
     template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
-    void convertStringToArg(const std::string& str,T& arg)
+    inline void convertStringToArg(const std::string& str,T& arg)
     {
         arg = static_cast<T>(std::stold(str));
     }
 
     ///字符串转换为char*
-    void convertStringToArg(const std::string& str,char* arg)
+    inline void convertStringToArg(const std::string& str,char* arg)
     {
         char* data = new char[str.length()];
         memcpy(data,str.data(),str.length());
@@ -136,7 +136,7 @@ namespace MetaUtility {
 
     ///字符串转换为class object pointer
     template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type* = nullptr>
-    void convertStringToArg(const std::string& str,T* obj)
+    inline void convertStringToArg(const std::string& str,T* obj)
     {
         std::stringstream in;
         in << str;
@@ -231,7 +231,7 @@ namespace MetaUtility {
         unsigned dataLength;
     };
 
-    bool Test_StringConvertor()
+    inline bool Test_StringConvertor()
     {
         enum EnumType{AA,BB,CC};
         ///arg to string
