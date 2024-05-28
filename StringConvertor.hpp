@@ -10,33 +10,6 @@
 #include <sstream>
 #include <type_traits>
 
-class Object
-{
-public:
-    Object()//默认构造函数
-    {
-        objName = "objName";
-        dataLength = 10;
-    }
-
-    friend std::ostream& operator << (std::ostream& os,const Object& obj)
-    {
-        os << obj.objName <<" "<< obj.dataLength;
-        return os;
-    }
-
-
-    friend std::istream& operator >> (std::istream& is,Object& obj)
-    {
-        is >> obj.objName >> obj.dataLength;
-        return is;
-    }
-
-public:
-    std::string objName;
-    unsigned dataLength;
-};
-
 namespace MetaUtility {
 
     ///数组分隔符
@@ -231,6 +204,33 @@ namespace MetaUtility {
         }
     }
 
+    class TestObject
+    {
+    public:
+        TestObject()//默认构造函数
+        {
+            objName = "objName";
+            dataLength = 10;
+        }
+
+        friend std::ostream& operator << (std::ostream& os,const TestObject& obj)
+        {
+            os << obj.objName <<" "<< obj.dataLength;
+            return os;
+        }
+
+
+        friend std::istream& operator >> (std::istream& is,TestObject& obj)
+        {
+            is >> obj.objName >> obj.dataLength;
+            return is;
+        }
+
+    public:
+        std::string objName;
+        unsigned dataLength;
+    };
+
     bool Test_StringConvertor()
     {
         enum EnumType{AA,BB,CC};
@@ -271,7 +271,7 @@ namespace MetaUtility {
         int type_array[5] = {5,6,7,8,9};
         std::string str_array = convertArgToString(type_array);
 
-        Object type_obj;
+        TestObject type_obj;
         type_obj.objName = "newName";
         type_obj.dataLength = 20;
         std::string str_obj = convertArgToString(&type_obj);
