@@ -32,15 +32,15 @@ The detailed functionality of this template file is as follows: <br />
 3.The file contains a test function Test_StringConvertor() to verify whether the conversion between strings and variables is successful. <br />
 
 ## 4.ParameterIO
-该模板用于将程序中的参数保存为xml文件,或者从xml文件中将参数读取到内存中,由此实现参数的保存和读取功能。<br />
-This template is used to save parameters from the program to an XML file or read parameters from an XML file into memory, thereby enabling the functionality of saving and loading parameters. <br />
+类ParameterIO用于将程序中的参数保存为xml文件,或者从xml文件中将参数读取到内存中,由此实现参数的保存和读取功能。<br />
+Class ParameterIO is used to save parameters from the program to an XML file or read parameters from an XML file into memory, thereby enabling the functionality of saving and loading parameters. <br />
 
 该文件只能在 Qt 框架的环境中执行。<br />
 This file can only be executed in the Qt framework environment. <br />
 
-## 5.History
-开发中...
+## 5.CommandConsole
+类CommandConsole类似于命令行工具、游戏控制台等指令工具,可以通过输入一个字符串完成函数调用,尤其是在程序发布并以后exe程序执行时，可以输入字符串修改内存中的变量或者查询目标变量值。
 
-## 6.CommandConsole
+## 6.History
 开发中...
 
