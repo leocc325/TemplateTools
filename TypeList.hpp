@@ -120,38 +120,6 @@ namespace MetaUtility{
     {
         using type = TypeList<>;
     };
-
-    bool Test_TypeList()
-    {
-        auto tpA_0 = GetNthType<2,int,bool,double,float>::type();
-        auto tpA_1 = AppendType<TypeList<>,int>::type();
-        auto tpA_2 = AppendType<TypeList<int>,double>::type();
-        auto tpA_3 = PrependType<TypeList<int>,double>::type();
-        auto tpA_4 = RemoveFirstType<TypeList<int,double,float>>::type();
-        auto tpA_5 = RemoveFirstType<TypeList<int>>::type();
-
-        auto tpB_1 = FrontArgsHelper<0,TypeList<>,int,double,float,bool,char>::type();
-        auto tpB_2 = FrontArgsHelper<1,TypeList<>,int,double,float,bool,char>::type();
-        auto tpB_3 = FrontArgsHelper<3,TypeList<>,int,double,float,bool,char>::type();
-        auto tpB_4 = FrontArgsHelper<4,TypeList<>,int,double,float,bool,char>::type();
-
-        auto tpC_1 = BehindArgsHelper<0,TypeList<int,double,float,bool,char>>::type();
-        auto tpC_2 = BehindArgsHelper<1,TypeList<int,double,float,bool,char>>::type();
-        auto tpC_3 = BehindArgsHelper<3,TypeList<int,double,float,bool,char>>::type();
-        auto tpC_4 = BehindArgsHelper<4,TypeList<int,double,float,bool,char>>::type();
-
-        auto tpD_1 = FrontArgs<0,int,double,bool,float>::type();
-        auto tpD_2 = FrontArgs<4,int,double,bool,float>::type();
-        auto tpD_3 = FrontArgs<1,int,double,bool,float>::type();
-        auto tpD_4 = FrontArgs<3,int,double,bool,float>::type();
-
-        auto tpE_1 = BehindArgs<0,int,double,bool,float>::type();
-        auto tpE_2 = BehindArgs<1,int,double,bool,float>::type();
-        auto tpE_3 = BehindArgs<2,int,double,bool,float>::type();
-        auto tpE_4 = BehindArgs<4,int,double,bool,float>::type();
-
-        return true;
-    }
 }
 
 #endif // TYPELIST_H
