@@ -22,21 +22,21 @@ namespace MetaUtility {
 
     ///数字量转换为string
     template<typename T,typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
-    QString convertArgToString(const T arg)
+    inline QString convertArgToString(const T arg)
     {
-        return std::to_string(arg);
+        return QString::number(arg);
     }
 
     ///枚举转换为string
     template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr>
-    QString convertArgToString(const T arg)
+    inline QString convertArgToString(const T arg)
     {
         return QString::number(arg);
     }
 
     ///string转换为string
     template<typename T,typename std::enable_if<std::is_same<QString,T>::value,T>::type* = nullptr>
-    QString convertArgToString(const T arg)
+    inline QString convertArgToString(const T arg)
     {
         return arg;
     }
@@ -47,7 +47,7 @@ namespace MetaUtility {
 
     ///char*转换为string
     template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type* = nullptr>
-    QString convertArgToString(const T arg)
+    inline QString convertArgToString(const T arg)
     {
         return QString(arg);
     }
@@ -58,7 +58,7 @@ namespace MetaUtility {
 
     ///class object pointer转换为string
     template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type* = nullptr>
-    QString convertArgToString(const T obj)
+    inline QString convertArgToString(const T obj)
     {
         std::stringstream ss;
         ss << (*obj);
@@ -67,7 +67,7 @@ namespace MetaUtility {
 
     ///容器转换为字符串
     template<typename T,template<typename...Element> class Array,typename...Args>
-    QString convertArgToString(const Array<T,Args...>& array)
+    inline QString convertArgToString(const Array<T,Args...>& array)
     {
         QString str;
         for(T item : array)
@@ -80,7 +80,7 @@ namespace MetaUtility {
 
     ///数组转换为字符串
     template<size_t N,typename T>
-    QString convertArgToString(const T(&array)[N])
+    inline QString convertArgToString(const T(&array)[N])
     {
         QString str;
         for(T item : array)
@@ -92,8 +92,8 @@ namespace MetaUtility {
     }
 
     ///字符串转换为整数
-    template <typename T,typename std::enable_if<std::is_integral<T>::value,int>::type* = nullptr>
-    void convertStringToArg(const QString& str,T& arg)
+    template <typename T,typename std::enable_if<std::is_integral<T>::value,T>::type* = nullptr>
+    inline void convertStringToArg(const QString& str,T& arg)
     {
         arg = static_cast<T>(str.toLongLong());
     }
@@ -145,13 +145,19 @@ namespace MetaUtility {
 
     ///字符串转换为浮点型
     template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
-    void convertStringToArg(const QString& str,T& arg)
+    inline void convertStringToArg(const QString& str,T& arg)
     {
         arg = static_cast<T>(str.toDouble());
     }
 
+    inline bool convertStringToArg(const QString& str, QString& arg)
+    {
+        arg = str;
+        return true;
+    }
+
     ///字符串转换为char*
-    void convertStringToArg(const QString& str,char* arg)
+    inline void convertStringToArg(const QString& str,char* arg)
     {
         char* data = new char[str.length()];
         memcpy(data,str.toStdString().data(),str.length());
@@ -161,7 +167,7 @@ namespace MetaUtility {
 
     ///字符串转换为class object pointer
     template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type* = nullptr>
-    void convertStringToArg(const QString& str,T* obj)
+    inline void convertStringToArg(const QString& str,T* obj)
     {
         std::stringstream in;
         in << str.toStdString();
