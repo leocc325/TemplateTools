@@ -313,7 +313,7 @@ namespace MetaUtility {
         int to_array[5];
         convertStringToArg(str_array,to_array);
 
-        Object to_obj;
+        TestObject to_obj;
         convertStringToArg(str_obj,&to_obj);
         return true;
     }
