@@ -3,6 +3,10 @@
 这是一个基于C++11/C++14的模板合集,里面包含了一些在泛型编程和元编程中可能会用到的一些工具,以及一些基于模板实现的功能,各个文件的功能和使用方法如下。 <br />
 This is a collection of templates based on C++11/C++14, which includes some tools that may be used in generic programming and metaprogramming, as well as some features implemented using templates. The functions and usage methods of each file are as follows. <br />
 
+## 0.testdemo
+这个文件中包含了一些测试案例用于检测其他模板文件中的函数是否能正常运行。<br />
+This file contains some test cases to check if the functions in other template files are working correctly.<br />
+
 ## 1.FunctionTraits
 该模板用于获取普通函数、成员函数、std::function、callable等的函数类型、参数数量和参数类型。<br />
 This template is used to obtain the function type, number of parameters, and parameter types of functions.The functions include:ordinary functions, member functions, std::function, callables, and so on.<br />
