@@ -27,3 +27,6 @@ The detailed functionality of this template file is as follows: <br />
 ## 4.ParameterIO
 该模板用于将程序中的参数保存为xml文件,或者从xml文件中将参数读取到内存中,由此实现参数的保存和读取功能。<br />
 This template is used to save parameters from the program to an XML file or read parameters from an XML file into memory, thereby enabling the functionality of saving and loading parameters. <br />
+
+该文件只能在 Qt 框架的环境中执行。<br />
+This file can only be executed in the Qt framework environment. <br />
