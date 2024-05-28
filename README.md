@@ -37,3 +37,10 @@ This template is used to save parameters from the program to an XML file or read
 
 该文件只能在 Qt 框架的环境中执行。<br />
 This file can only be executed in the Qt framework environment. <br />
+
+## 5.History
+开发中...
+
+## 6.CommandConsole
+开发中...
+
