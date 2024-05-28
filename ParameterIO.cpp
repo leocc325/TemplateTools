@@ -37,6 +37,7 @@ bool ParameterIO::initParameterIO(const QString& filePath)
     }
 
     //这个函数抛出异常之后使用catch捕捉并调用repair()函数
+    m_TargetFile.close();
     return true;
 }
 
@@ -97,6 +98,9 @@ ParameterIO::ParameterIO()
 
 void ParameterIO::repair()
 {
+    //抛出异常之后文件不会关闭,在这里关闭已打开的文件
+    m_TargetFile.close();
+
     //生成一个包含文件头和根节点的空xml对象
     QDomProcessingInstruction xmlInstruction = m_Doc.createProcessingInstruction("xml", "version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"");
     m_Doc.appendChild(xmlInstruction);
