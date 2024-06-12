@@ -141,7 +141,7 @@ namespace History {
         };
 
         std::function<void()> redo = [&]() mutable {
-            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - redoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
             callHelper(redoFunc,obj,tpl,std::make_index_sequence<redoArity>{});
         };
 
@@ -162,7 +162,7 @@ namespace History {
         };
 
         std::function<void()> redo = [&]() mutable {
-            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - redoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
             callHelper(redoFunc,redoObj,tpl,std::make_index_sequence<redoArity>{});
         };
 
