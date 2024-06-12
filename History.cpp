@@ -10,6 +10,7 @@ void History::StateStack::undo()
     m_StackMutex.lock();
 
     std::function<void()> func = m_UndoStack.front();
+    m_RedoFunc = m_UndoStack.front();
     m_UndoStack.pop_front();
 
     func();
@@ -21,6 +22,8 @@ void StateStack::redo()
 {
     if(m_UndoStack.empty())
         return;
+    
+    m_RedoFunc();
 }
 
 void StateStack::update(std::function<void()>&& undoFunc,std::function<void()>&& redoFunc)
