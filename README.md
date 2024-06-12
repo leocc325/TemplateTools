@@ -42,5 +42,5 @@ This file can only be executed in the Qt framework environment. <br />
 类CommandConsole类似于命令行工具、游戏控制台等指令工具,可以通过输入一个字符串完成函数调用,尤其是在程序发布并以后exe程序执行时，可以输入字符串修改内存中的变量或者查询目标变量值。
 
 ## 6.History
-开发中...
+该模板用于实现程序中的撤销和重做功能。<br />
 
