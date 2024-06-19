@@ -7,7 +7,6 @@ void History::StateStack::undo()
     if(m_UndoStack.empty())
         return;
 
-    std::function<void()> func;
     {
         std::lock_guard<std::mutex> lock(m_StackMutex);
 
