@@ -22,16 +22,22 @@ namespace History {
     struct IsCopyConstructable{};
 
     template<>
-    struct IsCopyConstructable<>
-    {
+    struct IsCopyConstructable<>{
         static constexpr bool value = true;
     };
 
     template<typename First,typename...Args>
-    struct IsCopyConstructable<First,Args...>
-    {
+    struct IsCopyConstructable<First,Args...>{
         static constexpr bool value = std::is_copy_constructible<First>::value && IsCopyConstructable<Args...>::value;
     };
+
+    ///获取参数包前N个参数对应的元组,同时将参数类型退化为原始类型,以副本形式将参数保存到元组中
+    template<size_t N,typename...Args>
+    using FrontTuple = typename FrontArgs<N,typename std::decay_t<Args>...>::type::type;
+
+    ///获取参数包后N个参数对应的元组,同时将参数类型退化为原始类型,以副本形式将参数保存到元组中
+    template<size_t N,typename...Args>
+    using BehindTuple = typename BehindArgs<N,typename std::decay_t<Args>...>::type::type;
 
     ///IsPassable检测参数数量和类型是否和目标函数匹配
     template<typename FirstFunc,typename SecondFunc,typename...Args>
@@ -78,15 +84,13 @@ namespace History {
 
         ///传入元组
         template<typename Func, typename Obj, typename Tuple,size_t...N>
-        void callHelper(Func func,Obj *obj,Tuple tpl,std::index_sequence<N...>)
-        {
+        void callHelper(Func func,Obj *obj,Tuple tpl,std::index_sequence<N...>){
             (obj->*func)(std::get<N>(std::forward<Tuple>(tpl))...);
         }
 
         ///从一个元组中获取给定索引上的子元组
         template<size_t StartIndex,typename Tuple,size_t...Counts>
-        auto getSubTuple(const Tuple& full,std::index_sequence<Counts...>)
-        {
+        auto getSubTuple(const Tuple& full,std::index_sequence<Counts...>){
             return std::make_tuple(std::get<StartIndex+Counts>(full)...);
         }
 
@@ -101,8 +105,11 @@ namespace History {
         ///redo函数
         std::function<void()> m_RedoFunc;
 
-        ///最大栈深度,以每个函数需要两个参数(int+double)为准,存10000个std::fucntion在栈中大约占用内存0.5M
+        ///最大栈深度,以每个函数需要两个参数(int+double)为准,存10000个std::fucntion在栈中实际大约占用内存1.4M,理论值应该是0.5M左右
         const std::size_t m_MaxSize = 10000;
+
+        ///在撤销或重做时禁止入栈的flag
+        bool m_HistoryFlag = false;
     };
 
     static StateStack stack;
@@ -112,15 +119,15 @@ namespace History {
     StateStack::add(Func func,Obj* obj ,Args&&...args)
     {
         constexpr int Arity = FunctionTraits<Func>::Arity;
-        std::tuple<Args...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);
+        std::tuple<std::decay_t <Args>...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);//退化参数类型，以副本的形式将参数保存到元组
 
-        std::function<void()> undoFunc = [&]() mutable {
-            typename FrontArgs<Arity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<Arity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> undoFunc = [=]() mutable {
+            FrontTuple<Arity,Args...> tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<Arity>{});
             callHelper(func,obj,tpl,std::make_index_sequence<Arity>{});
         };
 
-        std::function<void()> redoFunc = [&]() mutable {
-            typename BehindArgs<Arity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - Arity>(EntireTuple,std::make_index_sequence<Arity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> redoFunc = [=]() mutable {
+            BehindTuple<Arity,Args...> tpl = getSubTuple<sizeof... (Args) - Arity>(EntireTuple,std::make_index_sequence<Arity>{});
             callHelper(func,obj,tpl,std::make_index_sequence<Arity>{});
         };
 
@@ -133,15 +140,15 @@ namespace History {
     {
         constexpr int undoArity = FunctionTraits<Undo>::Arity;
         constexpr int redoArity = FunctionTraits<Redo>::Arity;
-        std::tuple<Args...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);
+        std::tuple<std::decay_t <Args>...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);
 
-        std::function<void()> undo = [&]() mutable {
-            typename FrontArgs<undoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<undoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> undo = [=]() mutable {
+            FrontTuple<undoArity,Args...> tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<undoArity>{});
             callHelper(undoFunc,obj,tpl,std::make_index_sequence<undoArity>{});
         };
 
-        std::function<void()> redo = [&]() mutable {
-            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> redo = [=]() mutable {
+            BehindTuple<redoArity,Args...> tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});
             callHelper(redoFunc,obj,tpl,std::make_index_sequence<redoArity>{});
         };
 
@@ -154,15 +161,15 @@ namespace History {
     {
         constexpr int undoArity = FunctionTraits<Undo>::Arity;
         constexpr int redoArity = FunctionTraits<Redo>::Arity;
-        std::tuple<Args...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);
+        std::tuple<std::decay_t <Args>...> EntireTuple = std::make_tuple(std::forward<Args>(args)...);
 
-        std::function<void()> undo = [&]() mutable {
-            typename FrontArgs<undoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<undoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> undo = [=]() mutable {
+            FrontTuple<undoArity,Args...> tpl = getSubTuple<0>(EntireTuple,std::make_index_sequence<undoArity>{});
             callHelper(undoFunc,undoObj,tpl,std::make_index_sequence<undoArity>{});
         };
 
-        std::function<void()> redo = [&]() mutable {
-            typename BehindArgs<redoArity,typename std::decay_t<Args>...>::type::type tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});//将参数类型退化为原始类型,以副本形式将参数保存到元组中
+        std::function<void()> redo = [=]() mutable {
+            BehindTuple<redoArity,Args...> tpl = getSubTuple<sizeof... (Args) - undoArity>(EntireTuple,std::make_index_sequence<redoArity>{});
             callHelper(redoFunc,redoObj,tpl,std::make_index_sequence<redoArity>{});
         };
 
