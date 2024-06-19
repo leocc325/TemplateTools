@@ -7,40 +7,47 @@ void History::StateStack::undo()
     if(m_UndoStack.empty())
         return;
 
-    m_StackMutex.lock();
+    std::function<void()> func;
+    {
+        std::lock_guard<std::mutex> lock(m_StackMutex);
 
-    std::function<void()> func = m_UndoStack.front();
-    m_RedoFunc = m_UndoStack.front();
-    m_UndoStack.pop_front();
+        m_RedoFunc = m_UndoStack.front();
+        m_UndoStack.pop_front();
+    }
 
-    func();
-
-    m_StackMutex.unlock();
+    m_HistoryFlag = true;
+    m_RedoFunc();
+    m_HistoryFlag = false;
 }
 
 void StateStack::redo()
 {
     if(m_UndoStack.empty())
         return;
-    
+
+    m_HistoryFlag = true;
     m_RedoFunc();
+    m_HistoryFlag = false;
 }
 
 void StateStack::update(std::function<void()>&& undoFunc,std::function<void()>&& redoFunc)
 {
-    if(m_StackMutex.try_lock())
+    if(m_HistoryFlag)//如果是在redo/undo的过程中引起的updat则直接返回
         return;
+
+    std::lock_guard<std::mutex> lock(m_StackMutex);
 
     if(m_UndoStack.size() >= m_MaxSize)
         m_UndoStack.pop_back();//当栈已经满了的情况下,删除最末端的元素
 
     m_UndoStack.push_front(std::move(undoFunc));
     m_RedoFunc = std::move(redoFunc);
-    m_StackMutex.unlock();
 }
 
         /** note 1
-         *栈在压入和弹出的时候加锁,除此以外这个锁还有一个很重要的重用,就是防止撤销操作进入死循环,不是所有人都能在刚开始接触和使用History接口的时候就能立刻理解到在什么时候、什么地方注册撤销动作才是正确合理的。
+         * 建议History::store只在UI中调用,毕竟撤销/重做就是针对用户操作而不是业务逻辑而存在的,在业务中调用也不是不行,但是不那么建议。
+         *
+         *栈在压入和弹出的时候加锁,除此以外这个锁还有一个很重要的重用,就是防止不恰当的调用导致撤销操作进入死循环。
          * 考虑以下场景,存在一个add和remove方法,它们互为对方的撤销动作,所以在注册撤销动作的时候可能出现以下情况:
          *
          * add方法的功能实现如下:
@@ -69,9 +76,8 @@ void StateStack::update(std::function<void()>&& undoFunc,std::function<void()>&&
          *      add(Item* item);
          * }
          * 删除Item的时候同理,这样使用History::store函数就不会导致撤销动作陷入死循环
-         * 但是正如前面所说,不是所有人都能在刚开始使用History::store的时候就理解到在哪里调用才是正确的(尽管大部分人应该都能正确使用,但是依然不能排除意外错误使用的可能性)
-         * 所以对这种情况就行规避是必要的,很巧的是,锁刚好可以避免程序出现这种情况
-         * 在添加撤销动作和执行撤销动作的时候都对栈进行加锁,一方面可以避免数据竞争(尽管栈的压入和弹出都应该是在主线程中执行,但是谁能保证History::store不会被使用者在子线程中调用呢)
+         * 所以对这种情况就行规避是必要的,锁刚好可以避免程序出现这种情况
+         * 在添加撤销动作和执行撤销动作的时候都对栈进行加锁,一方面可以避免数据竞争(尽管栈的压入和弹出都应该是在主线程中执行,但是依然存在History::store被使用者在子线程中调用)
          * 另一方面就是避免出现上述的死循环情况,其原理如下
          * 在StateStack::add和StateStack::undo中都加上锁,使代码结构如下
          * void StateStack::add(Func func)
@@ -109,4 +115,8 @@ void StateStack::update(std::function<void()>&& undoFunc,std::function<void()>&&
          * 当函数执行到#1的时候,此时撤销动作(add函数被调用),根据前面的函数定义,add(Item*)函数会首先注册一个撤销动作,所以程序会继续执行到#2处,在#3处,由于尝试加锁失败
          * 所以History::store会被return,程序跳转回add(Item*)函数#4处继续执行,即完成添加Item*的操作
          * 这样一来,就不会有remove(Item* item)在撤销流程中被添加到栈中,也完成的remove对应的add操作,避免了撤销死循环
+         *
+         * 更新:由于tyr_lock()函数允许虚假地失败而返回 false,即使互斥当前未为任何其他线程所锁定,这会导致在正常情况下状态保存失败,所以需要额外使用一个flag来判断当前是否处于递归中
+         * 当执行redo/undo前将flag置为true,undo/redo执行完毕之后将flag置为false
+         * 当History::store时判断flag是否为true,为true则返回,否则将新的函数压入栈中
         **/
