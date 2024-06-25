@@ -13,7 +13,12 @@
 /**
  * @brief The History class
  */
-
+/*
+#define STOREHISTORY(...) std::stringstream ss ;\
+ss << std::hex <<__PRETTY_FUNCTION__<<this;\
+const std::string id = ss.str();\
+History::store(id,__VA_ARGS__);
+*/
 using namespace MetaUtility;
 
 namespace History {
@@ -45,12 +50,14 @@ namespace History {
     {
         using FirFuncArgs = typename FunctionTraits<FirstFunc>::BareTupleType;
         using SecFuncArgs = typename FunctionTraits<SecondFunc>::BareTupleType;
-        using FirPartArgs = typename FrontArgs<FunctionTraits<FirstFunc>::Arity,typename std::decay_t<Args>...>::type::type;
-        using SecPartArgs = typename BehindArgs<FunctionTraits<SecondFunc>::Arity,typename std::decay_t<Args>...>::type::type;
+        using FirPartArgs = FrontTuple<FunctionTraits<FirstFunc>::Arity,Args...>;
+        using SecPartArgs = BehindTuple<FunctionTraits<SecondFunc>::Arity,Args...>;
 
-        static constexpr bool value = std::is_same<FirFuncArgs,FirPartArgs>::value &&
-                                                            std::is_same<SecFuncArgs,SecPartArgs>::value &&
-                                                            IsCopyConstructable<typename std::decay<Args>::type...>::value;
+        static constexpr int inputArity = FunctionTraits<FirstFunc>::Arity + FunctionTraits<SecondFunc>::Arity;
+        static constexpr bool value = (inputArity == sizeof... (Args)) &&//传入参数数量是否等于两个函数的参数数量的和
+                                       std::is_same<FirFuncArgs,FirPartArgs>::value &&//第一部分的参数数量、类型是否和第一个函数的参数数量、类型相同
+                                       std::is_same<SecFuncArgs,SecPartArgs>::value &&//第二部分的参数数量、类型是否和第二个函数的参数数量、类型相等
+                                       IsCopyConstructable<typename std::decay<Args>::type...>::value;//传入的参数是否全部都支持拷贝构造
     };
 
     class StateStack
@@ -99,7 +106,6 @@ namespace History {
         std::mutex m_StackMutex;
 
         ///状态栈,用于保存撤销动作,用deque而不使用stack的原因是:在栈满了的情况下继续添加对象,需要将最末位的(最早添加的)元素移除,并将最新的元素压入栈
-        ///考虑问题:当注册的函数需要的参数为指针的时候是否存在风险？比如执行撤销的时候,这个指针已经在外部被删除
         std::deque<std::function<void()>> m_UndoStack;
 
         ///redo函数
