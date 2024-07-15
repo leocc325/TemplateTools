@@ -145,9 +145,9 @@ namespace MetaUtility {
 
     template<template<typename...> class Array,typename T,typename...Args>
     constexpr static bool IsSequenceContainer =
-        std::is_same_v<Array<T,Args...>, std::list<T,Args...>> ||
-        std::is_same_v<Array<T,Args...>,std::vector<T,Args...>>||
-        std::is_same_v<Array<T,Args...>,std::deque<T,Args...>>;
+        std::is_same<Array<T,Args...>, std::list<T,Args...>>::value ||
+        std::is_same<Array<T,Args...>,std::vector<T,Args...>>::value ||
+        std::is_same<Array<T,Args...>,std::deque<T,Args...>>::value;
 
     ///字符串转换为容器
     template<typename T,typename...Args,template<typename...> class Array,
