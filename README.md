@@ -44,3 +44,5 @@ This file can only be executed in the Qt framework environment. <br />
 ## 6.History
 该模板用于实现程序中的撤销和重做功能。<br />
 
+## 7.Throttler && Debouncer
+用于函数调用节流和防抖。<br />
