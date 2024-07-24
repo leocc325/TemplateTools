@@ -27,6 +27,12 @@ using namespace MetaUtility;
  */
 class CommandConsole
 {
+    template<typename Func>
+    struct ReturnVoid
+    {
+        using RT = typename FunctionTraits<Func>::ReturnType;
+        constexpr static bool value = std::is_same<RT,void>::value;
+    };
 public:
     enum CallType{DefaultThread,GuiThread,IndependentThread};
 
@@ -48,10 +54,8 @@ public:
         if(funcHash.contains(command.toLower()))
             return;
 
-        std::function<void()> function = [=]()
-        {
-            //在C++14中，无法使用在模板中使用constexpr来控制模板生成,所以这里使用了两个辅助函数callHelper,它们通过std::true_type和std::false_type来决定调用哪个函数。
-            callHelper(std::is_member_function_pointer<Func>{}, func);
+        std::function<void()> function = [=](){
+            callHelper(func);
         };
 
         funcHash.insert(command.toLower(),function);
@@ -69,10 +73,8 @@ public:
         if(funcHash.contains(command.toLower()))
             return;
 
-        std::function<void()> function = [=]()
-        {
-            //在C++14中，无法使用在模板中使用constexpr来控制模板生成,所以这里使用了两个辅助函数callHelper,它们通过std::true_type和std::false_type来决定调用哪个函数。
-            callHelper(std::is_member_function_pointer<Func>{}, func, obj);
+        std::function<void()> function = [=](){
+            callHelper(func, obj);
         };
 
         funcHash.insert(command.toLower(),function);
@@ -108,57 +110,64 @@ private:
     };
 
     ///void非成员函数
-    template<typename Func,typename Tuple> void callImpl(std::true_type,Func func,Tuple tpl)
+    template<typename Func,typename Tuple>
+    typename std::enable_if<ReturnVoid<Func>::value && !std::is_member_function_pointer<Func>::value>::type
+    callImpl(Func func,Tuple&& argTpl)
     {
 #if __cplusplus > 201402L
-        std::apply(std::forward<Func>(func),tpl);
+        std::apply(std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #else
-        call(std::forward<Func>(func),tpl);
+        call(std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #endif
         returnValue = "void";
     }
 
     ///non void非成员函数
-    template<typename Func,typename Tuple> void callImpl(std::false_type,Func func,Tuple tpl)
+    template<typename Func,typename Tuple>
+    typename std::enable_if<!ReturnVoid<Func>::value && !std::is_member_function_pointer<Func>::value>::type
+    callImpl(Func func,Tuple&& argTpl)
     {
 #if __cplusplus > 201402L
-        auto ret = std::apply(std::forward<Func>(func),tpl);
+        auto ret = std::apply(std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #else
-        auto ret = call(std::forward<Func>(func),tpl);
+        auto ret = call(std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #endif
         returnValue = convertArgToString(ret);
     }
 
     ///void成员函数
-    template<typename Obj,typename Func,typename Tuple> void callImpl(std::true_type,Obj obj,Func func,Tuple argTpl)
+    template<typename Obj,typename Func,typename Tuple>
+    typename std::enable_if<ReturnVoid<Func>::value && std::is_member_function_pointer<Func>::value>::type
+    callImpl(Obj obj,Func func,Tuple&& argTpl)
     {
 #if __cplusplus > 201402L
         std::tuple<Obj> objTuple = std::make_tuple(obj);
         auto tpl = std::tuple_cat(objTuple,argTpl);
         std::apply(std::forward<Func>(func),tpl);
 #else
-        call(std::forward<Obj>(obj),std::forward<Func>(func),argTpl);
+        call(std::forward<Obj>(obj),std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #endif
         returnValue = "void";
     }
 
     ///non void成员函数
-    template<typename Func,typename Obj,typename Tuple> void callImpl(std::false_type,Obj obj,Func func,Tuple argTpl)
+    template<typename Func,typename Obj,typename Tuple>
+    typename std::enable_if<!ReturnVoid<Func>::value && std::is_member_function_pointer<Func>::value>::type
+    callImpl(Obj obj,Func func,Tuple&& argTpl)
     {
 #if __cplusplus > 201402L
         std::tuple<Obj> objTuple = std::make_tuple(obj);
         auto tpl = std::tuple_cat(objTuple,argTpl);
         auto ret = std::apply(std::forward<Func>(func),tpl);
 #else
-        auto ret = call(std::forward<Obj>(obj),std::forward<Func>(func),argTpl);
+        auto ret = call(std::forward<Obj>(obj),std::forward<Func>(func),std::forward<Tuple>(argTpl));
 #endif
         returnValue = convertArgToString(ret);
     }
 
-    template<typename Func> void callHelper(std::false_type, Func func)
+    template<typename Func> void callHelper(Func func)
     {
         using DecayFunc = typename std::decay<Func>::type;
-        using ReturnType = typename FunctionTraits<DecayFunc>::ReturnType ;
         using Tuple = typename FunctionTraits<DecayFunc>::BareTupleType ;
 
         int ArgsNum = FunctionTraits<DecayFunc>::Arity;
@@ -171,14 +180,13 @@ private:
         Tuple tpl;
         TupleHelper<FunctionTraits<DecayFunc>::Arity - 1, Tuple>::set(tpl, argStringList);
 
-        callImpl(std::integral_constant<bool,std::is_void<ReturnType>::value>{},std::forward<Func>(func),tpl);
+        callImpl(func,tpl);
         errorInfo = QString("call successed,return value:%1").arg(returnValue);
     }
 
-    template<typename Func, typename Obj> void callHelper(std::true_type, Func func, Obj obj)
+    template<typename Func, typename Obj> void callHelper( Func func, Obj obj)
     {
         using DecayFunc = typename std::decay<Func>::type;
-        using ReturnType = typename FunctionTraits<DecayFunc>::ReturnType ;
         using ArgsTuple = typename FunctionTraits<DecayFunc>::BareTupleType ;
 
         int ArgsNum = FunctionTraits<DecayFunc>::Arity;
@@ -191,12 +199,12 @@ private:
         ArgsTuple argsTuple;
         TupleHelper<FunctionTraits<DecayFunc>::Arity - 1, ArgsTuple>::set(argsTuple, argStringList);
 
-        callImpl(std::integral_constant<bool,std::is_void<ReturnType>::value>{},std::forward<Obj>(obj),std::forward<Func>(func),argsTuple);
+        callImpl(obj,func,argsTuple);
         errorInfo = QString("call successed,return value:%1").arg(returnValue);
     }
 
     template<typename Func, typename Tuple>
-    auto call(Func func, Tuple tpl)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
+    auto call(Func func, Tuple&& tpl)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
     {
         return functionHelper(std::forward<Func>(func),
                               std::forward<Tuple>(tpl),
@@ -204,7 +212,7 @@ private:
     }
 
     template<typename Obj, typename Func, typename Tuple>
-    auto call(Obj obj, Func func, Tuple tpl)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
+    auto call(Obj obj, Func func, Tuple&& tpl)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
     {
         return functionHelper(std::forward<Obj>(obj),
                               std::forward<Func>(func), std::forward<Tuple>(tpl),
@@ -212,13 +220,13 @@ private:
     }
 
     template<typename Func, typename Tuple, std::size_t... Index>
-    auto functionHelper(Func func, Tuple tpl, std::index_sequence<Index...>)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
+    auto functionHelper(Func func, Tuple&& tpl, std::index_sequence<Index...>)->typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
     {
         return std::forward<Func>(func)(std::get<Index>(std::forward<Tuple>(tpl))...);
     }
 
     template<typename Obj, typename Func, typename Tuple, std::size_t... Index>
-    auto functionHelper(Obj obj, Func func, Tuple tpl, std::index_sequence<Index...>)-> typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
+    auto functionHelper(Obj obj, Func func, Tuple&& tpl, std::index_sequence<Index...>)-> typename FunctionTraits<typename std::remove_reference<Func>::type>::ReturnType
     {
         return (obj->*func)(std::get<Index>(tpl)...);
     }
