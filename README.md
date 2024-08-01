@@ -46,6 +46,6 @@ The class CommandConsole is similar to command-line tools or game consoles, allo
 该模板用于实现程序中的撤销和重做功能。<br />
 This template is used to implement undo and redo functionality in a program. <br />
 
-## 7.Throttler && Debouncer
+## 7.Throttler && ThrottlePrivate.hpp
 用于函数调用节流和防抖。<br />
 This function is used to Throttler and Debounce.<br />
