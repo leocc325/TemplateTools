@@ -1,159 +1,116 @@
 #ifndef THROTTLER_HPP
 #define THROTTLER_HPP
 
-#include <type_traits>
-#include <functional>
-#include <chrono>
-#include <mutex>
-#include <thread>
-#include <utility>
-#include <list>
-#include <sstream>
+#include <unordered_map>
+#include "ThrottlePrivate.hpp"
 
-#include <QApplication>
-#include <QThread>
-#include <QDebug>
-
-#include "FunctionTraits.hpp"
-
-/// 可以通过宏调用节流接口，参数从前到后分别为:
-/// 处理函数的间隔时间、函数指针、类对象指针(如果不是成员函数则忽略这个参数)、参数1、参数2...
-/// 此外，暂时不接受返回值为void以外的函数
-
-#define SYNCTHROTTLE(time,...) \
-static SyncThrottle throttle(time);\
-QThread* thread = this->thread();\
-throttle.call(thread,__VA_ARGS__);
-
-#define ASYNCTHROTTLE(time,...) \
-static AsyncThrottle throttle(time);\
-throttle.call(__VA_ARGS__);
-
-template<typename Func>
-struct ReturnVoid
-{
-    using RT =typename FunctionTraits<typename std::decay<Func>::type>::ReturnType;
-    constexpr static bool value = std::is_same<RT,void>::value;
-};
-
-template<typename Func>
-struct IsFunction{
-    using NonrefFunc = typename std::remove_reference<Func>::type;//这里使用decay不能正确推导自由函数类型，编译器你又在发什么癫!!
-    constexpr static bool value  = std::is_function<NonrefFunc>::value || std::is_member_function_pointer<NonrefFunc>::value;
-};
-
-template <typename Func>
-typename std::enable_if<IsFunction<Func>::value,std::string>::type
-getFunctionAddress(Func&& func)
-{
-    void* ptr = reinterpret_cast<void*>(func);
-    std::stringstream ss;
-    ss << std::hex <<ptr;
-    return ss.str();
-}
-
-/*
-template <typename Class, typename Ret, typename... Args>
-std::string getFunctionAddress(Ret (Class::*ptr)(Args...))
-{
-    union
-    {
-        Ret (Class::*memberFunc)(Args...);
-        void* generalFunc;
-    } converter;
-    converter.memberFunc = ptr;
-    std::stringstream ss;
-    ss << std::hex <<reinterpret_cast<uintptr_t>(converter.generalFunc);
-    return ss.str();
-}
-*/
-
-///每一个函数都有一个与之对应的Throttle对象专门管理这个函数的调用
-class AbstractThrottle
+class Throttler
 {
 public:
-    AbstractThrottle(size_t interval);
-
-    virtual ~AbstractThrottle();
-
-protected:
-    bool isEmpty();
-
-    ///线程函数,用于处理任务队列,调用每次有任务进入队列时都尝试启动这个线程函数,队列中任务为空时结束线程
-    void taskThread();
-
-    void addTask(std::function<void()>&& task);
-
-    virtual void processTask() = 0;
-
-protected:
-    std::mutex m_Mutex;
-    std::atomic<bool> m_IsRunning{false};
-    std::list<std::function<void()>> m_TaskQue;
-    std::chrono::milliseconds m_Interval{1000};
-    std::chrono::steady_clock::time_point m_LastCall;
-};
-
-///同步节流
-class SyncThrottle:public AbstractThrottle
-{
-    ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
-public:
-    SyncThrottle(size_t interval);
-
-    template<typename Func,typename...Args>
-    typename std::enable_if<ReturnVoid<Func>::value>::type
-    call(QThread* thrd,Func&& func,Args&&...args)
+    static Throttler* getInstance()
     {
-        m_TargetThread = thrd;
-        std::function<void()> task = std::bind(std::forward<Func>(func),std::forward<Args>(args)...);
-        this->addTask(std::move(task));
+        if(instance == nullptr)
+            instance = new Throttler();
+        return instance;
     }
 
-    template<typename Func,typename Obj,typename...Args>
-    typename std::enable_if<ReturnVoid<Func>::value>::type
-    call(QThread* thrd, Func&& func,Obj* obj,Args&&...args)
-    {
-        m_TargetThread = thrd;
-        std::function<void()> task = std::bind(std::forward<Func>(func),obj,std::forward<Args>(args)...);
-        this->addTask(std::move(task));
-    }
-
-protected:
-    void processTask() override;
-
-protected:
-    QThread* m_TargetThread = nullptr;
-};
-
-///异步节流
-class AsyncThrottle:public AbstractThrottle
-{
     ///传入的函数会在单独的线程中执行,不建议调用GUI相关的函数
-public:
-    AsyncThrottle(size_t interval);
-
-    template<typename Func,typename...Args>
-    typename std::enable_if<ReturnVoid<Func>::value>::type
-    call(Func&& func,Args&&...args)
-    {
-        std::function<void()> task = std::bind(std::forward<Func>(func),std::forward<Args>(args)...);
-        this->addTask(std::move(task));
-    }
-
     template<typename Func,typename Obj,typename...Args>
-    typename std::enable_if<ReturnVoid<Func>::value>::type
-    call(Func&& func,Obj* obj,Args&&...args)
+    static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
+    Async(std::size_t time, Func func,Obj* obj,Args&&...args)
     {
-        std::function<void()> task = std::bind(std::forward<Func>(func),obj,std::forward<Args>(args)...);
-        this->addTask(std::move(task));
+        AsyncThrottle* t = funcMapCheck<AsyncThrottle,Func,Obj>(time,func,obj);
+        t->call(func,obj,std::forward<Args>(args)...);
     }
 
-protected:
-    void processTask() override;
+    ///传入的函数会在单独的线程中执行,不建议调用GUI相关的函数
+    template<typename Func,typename...Args>
+    static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
+    Async(std::size_t time, Func func,Args&&...args)
+    {
+        AsyncThrottle* t = funcMapCheck<AsyncThrottle,Func>(time,func);
+        t->call(func,std::forward<Args>(args)...);
+    }
+
+    ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
+    template<typename Func,typename Obj,typename...Args>
+    static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
+    Sync(std::size_t time, Func func,Obj* obj,Args&&...args)
+    {
+        AsyncThrottle* t = funcMapCheck<SyncThrottle,Func,Obj>(time,func,obj);
+        t->call(func,obj,std::forward<Args>(args)...);
+    }
+
+    ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
+    template<typename Func,typename...Args>
+    static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
+    Sync(std::size_t time,Func func,Args&&...args)
+    {
+        AsyncThrottle* t = funcMapCheck<SyncThrottle,Func>(time,func);
+        t->call(func,std::forward<Args>(args)...);
+    }
+
+private:
+    Throttler(){}
+
+    ///获取自由函数指针的地址
+    template <typename ReturnType,typename...Args>
+    static std::string getFunctionAddress(ReturnType(*ptr)(Args...))
+    {
+        std::stringstream ss;
+        ss << std::hex <<reinterpret_cast<uintptr_t>(ptr);
+        return ss.str();
+    }
+
+    ///获取成员函数指针的地址
+    template <typename Class, typename ReturnType, typename... Args>
+    static std::string getFunctionAddress(ReturnType (Class::*ptr)(Args...),Class* obj)
+    {
+        union
+        {
+            ReturnType (Class::*memberFunc)(Args...);
+            void* generalFunc;
+        } converter;
+        converter.memberFunc = ptr;
+        std::stringstream ss;
+        ss << std::hex <<reinterpret_cast<uintptr_t>(converter.generalFunc)<<obj;
+        return ss.str();
+    }
+
+    ///检查hash表中是否已经存在自由函数Func的管理者,如果不存在则创建,最后返回Func对应的管理者
+    template<typename ThrottleType,typename Func>
+    static ThrottleType* funcMapCheck(std::size_t time,Func func)
+    {
+        std::string funcAddress = getFunctionAddress(func);
+        std::size_t funcHash = std::hash<std::string>{}(funcAddress);
+
+        if(!funcMap.count(funcHash)){
+            funcMap.emplace(funcHash,new ThrottleType(time));
+        }
+
+        ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
+        return ptr;
+    }
+
+    ///检查hash表中是否已经存在成员函数Func的管理者,如果不存在则创建,最后返回Func对应的管理者
+    template<typename ThrottleType,typename Func,typename Obj>
+    static ThrottleType* funcMapCheck(std::size_t time,Func func,Obj* obj)
+    {
+        std::string funcAddress = getFunctionAddress(func,obj);
+        std::size_t funcHash = std::hash<std::string>{}(funcAddress);
+
+        if(!funcMap.count(funcHash)){
+            funcMap.emplace(funcHash,new ThrottleType(time));
+        }
+
+        ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
+        return ptr;
+    }
+
+private:
+    static Throttler* instance;
+
+    static std::unordered_map<std::size_t,AbstractThrottle*> funcMap;
 };
 
-namespace Throttle {
-
-}
 #endif // THROTTLER_HPP
