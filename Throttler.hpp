@@ -37,7 +37,7 @@ public:
     static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
     sync(std::size_t time, Func func,Obj* obj,Args&&...args)
     {
-        AsyncThrottle* t = funcMapCheck<SyncThrottle,Func,Obj>(time,func,obj);
+        SyncThrottle* t = funcMapCheck<SyncThrottle,Func,Obj>(time,func,obj);
         t->call(func,obj,std::forward<Args>(args)...);
     }
 
@@ -46,7 +46,7 @@ public:
     static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
     sync(std::size_t time,Func func,Args&&...args)
     {
-        AsyncThrottle* t = funcMapCheck<SyncThrottle,Func>(time,func);
+        SyncThrottle* t = funcMapCheck<SyncThrottle,Func>(time,func);
         t->call(func,std::forward<Args>(args)...);
     }
 
