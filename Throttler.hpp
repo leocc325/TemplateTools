@@ -7,13 +7,6 @@
 class Throttler
 {
 public:
-    static Throttler* getInstance()
-    {
-        if(instance == nullptr)
-            instance = new Throttler();
-        return instance;
-    }
-
     ///传入的函数会在单独的线程中执行,不建议调用GUI相关的函数
     template<typename Func,typename Obj,typename...Args>
     static typename std::enable_if<IsFunctionPointer<Func>::value && ReturnVoid<Func>::value>::type
@@ -73,8 +66,6 @@ public:
     }
 
 private:
-    Throttler(){}
-
     ///获取自由函数指针的地址
     template <typename ReturnType,typename...Args>
     static std::string getFunctionAddress(ReturnType(*ptr)(Args...))
