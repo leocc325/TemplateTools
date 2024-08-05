@@ -4,6 +4,21 @@
 #include <unordered_map>
 #include "ThrottlePrivate.hpp"
 
+class ThrottleError:public std::exception
+{
+public:
+    ThrottleError(const char* info):errorString(info){}
+
+    ThrottleError(const std::string& info):errorString(info){}
+
+    ThrottleError(std::string&& info):errorString(std::move(info)){}
+
+    virtual const char * what() const noexcept override{return errorString.data();}
+
+private:
+    std::string errorString;
+};
+
 class Throttler
 {
 public:
@@ -102,6 +117,13 @@ private:
         }
 
         ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
+        if(!ptr)
+        {
+            std::string funcInfo = "Throttler error:cannot bind function to sync<Func,Args...>\
+                                    and async<Func,Args...> at the same time\n";
+            funcInfo.append("Function:").append(typeid(func).name()).append("\n");
+            throw ThrottleError(funcInfo);
+        }
         return ptr;
     }
 
@@ -117,6 +139,14 @@ private:
         }
 
         ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
+        if(!ptr)
+        {
+            std::string funcInfo = "Throttler error:cannot bind function to sync<Func,Obj,Args...>\
+                                    and async<Func,Obj,Args...> at the same time\n";
+            funcInfo.append("Function:").append(typeid(func).name()).append("\n");
+            funcInfo.append("Class:").append(typeid(obj).name());
+            throw ThrottleError(funcInfo);
+        }
         return ptr;
     }
 
