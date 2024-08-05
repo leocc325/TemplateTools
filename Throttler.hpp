@@ -121,8 +121,6 @@ private:
     }
 
 private:
-    static Throttler* instance;
-
     static std::unordered_map<std::size_t,AbstractThrottle*> funcMap;
 };
 
