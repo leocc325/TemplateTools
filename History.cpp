@@ -1,8 +1,11 @@
 #include "History.hpp"
 
-using namespace History;
+bool History::m_HistoryFlag = false;
+std::mutex History::m_StackMutex;
+std::deque<std::function<void()>> History::m_UndoStack;
+std::function<void()> History::m_RedoFunc;
 
-void History::StateStack::undo()
+void History::undo()
 {
     if(m_UndoStack.empty())
         return;
@@ -19,7 +22,7 @@ void History::StateStack::undo()
     m_HistoryFlag = false;
 }
 
-void StateStack::redo()
+void History::redo()
 {
     if(m_UndoStack.empty())
         return;
@@ -29,7 +32,7 @@ void StateStack::redo()
     m_HistoryFlag = false;
 }
 
-void StateStack::update(std::function<void()>&& undoFunc,std::function<void()>&& redoFunc)
+void History::update(std::function<void()>&& undoFunc,std::function<void()>&& redoFunc)
 {
     if(m_HistoryFlag)//如果是在redo/undo的过程中引起的updat则直接返回
         return;
