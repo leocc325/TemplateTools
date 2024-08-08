@@ -21,8 +21,8 @@ void AbstractThrottle::taskThread()
         {
             if(!this->isEmpty())
             {
-                m_LastCall = now;
                 processTask();
+                m_LastCall = std::chrono::steady_clock::now();
             }
             else
                 break;//如果时间间隔大于m_Interval且任务队列为空,就可以退出线程
