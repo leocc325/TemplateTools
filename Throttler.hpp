@@ -7,13 +7,13 @@
 class ThrottleError:public std::exception
 {
 public:
-    ThrottleError(const char* info):errorString(info){}
+    ThrottleError(const char* info);
 
-    ThrottleError(const std::string& info):errorString(info){}
+    ThrottleError(const std::string& info);
 
-    ThrottleError(std::string&& info):errorString(std::move(info)){}
+    ThrottleError(std::string&& info);
 
-    virtual const char * what() const noexcept override{return errorString.data();}
+    virtual const char * what() const noexcept;
 
 private:
     std::string errorString;
@@ -65,8 +65,12 @@ public:
     {
         std::string funcAddress = getFunctionAddress(func,obj);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        if(funcMap.count(funcHash))
-            funcMap.erase(funcHash);
+        {
+            std::lock_guard<std::mutex> locker(mapMutex);
+            if(funcMap.count(funcHash)){
+                funcMap.erase(funcHash);
+            }
+        }
     }
 
     ///移除对自由函数的节流控制
@@ -76,8 +80,12 @@ public:
     {
         std::string funcAddress = getFunctionAddress(func);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        if(funcMap.count(funcHash))
-            funcMap.erase(funcHash);
+        {
+            std::lock_guard<std::mutex> locker(mapMutex);
+            if(funcMap.count(funcHash)){
+                funcMap.erase(funcHash);
+            }
+        }
     }
 
 private:
@@ -112,8 +120,11 @@ private:
         std::string funcAddress = getFunctionAddress(func);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
 
-        if(!funcMap.count(funcHash)){
-            funcMap.emplace(funcHash,new ThrottleType(time));
+        {
+            std::lock_guard<std::mutex> locker(mapMutex);
+            if(!funcMap.count(funcHash)){
+                funcMap.emplace(funcHash,new ThrottleType(time));
+            }
         }
 
         ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
@@ -134,8 +145,11 @@ private:
         std::string funcAddress = getFunctionAddress(func,obj);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
 
-        if(!funcMap.count(funcHash)){
-            funcMap.emplace(funcHash,new ThrottleType(time));
+        {
+            std::lock_guard<std::mutex> locker(mapMutex);
+            if(!funcMap.count(funcHash)){
+                funcMap.emplace(funcHash,new ThrottleType(time));
+            }
         }
 
         ThrottleType* ptr = dynamic_cast<ThrottleType*>(funcMap.at(funcHash));
@@ -152,6 +166,7 @@ private:
 
 private:
     static std::unordered_map<std::size_t,AbstractThrottle*> funcMap;
+    static std::mutex mapMutex;
 };
 
 #endif // THROTTLER_HPP
