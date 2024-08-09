@@ -119,7 +119,6 @@ private:
     {
         std::string funcAddress = getFunctionAddress(func);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-
         {
             std::lock_guard<std::mutex> locker(mapMutex);
             if(!funcMap.count(funcHash)){
@@ -144,7 +143,6 @@ private:
     {
         std::string funcAddress = getFunctionAddress(func,obj);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-
         {
             std::lock_guard<std::mutex> locker(mapMutex);
             if(!funcMap.count(funcHash)){
