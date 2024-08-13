@@ -35,14 +35,13 @@ void AbstractThrottle::taskThread()
 
 void AbstractThrottle::addTask(std::function<void ()> &&task)
 {
-    {
-        std::lock_guard<std::mutex> guard(m_Mutex);
-        m_TaskQue.push_back(task);
-    }
+    std::lock_guard<std::mutex> guard(m_Mutex);
+    m_TaskQue.push_back(task);
 
     //如果线程还没有启动,就启动线程处理任务队列
     if(!m_IsRunning.load())
     {
+        m_IsRunning.store(true);
         std::thread t(&AbstractThrottle::taskThread,this);
         t.detach();
     }
