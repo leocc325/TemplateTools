@@ -65,12 +65,10 @@ public:
     {
         std::string funcAddress = getFunctionAddress(func,obj);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        {
-            std::lock_guard<std::mutex> locker(mapMutex);
-            if(funcMap.count(funcHash)){
-                funcMap.erase(funcHash);
-            }
-        }
+
+        std::lock_guard<std::mutex> locker(mapMutex);
+        if(funcMap.count(funcHash))
+            funcMap.erase(funcHash);
     }
 
     ///移除对自由函数的节流控制
@@ -80,12 +78,10 @@ public:
     {
         std::string funcAddress = getFunctionAddress(func);
         std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        {
-            std::lock_guard<std::mutex> locker(mapMutex);
-            if(funcMap.count(funcHash)){
-                funcMap.erase(funcHash);
-            }
-        }
+
+        std::lock_guard<std::mutex> locker(mapMutex);
+        if(funcMap.count(funcHash))
+            funcMap.erase(funcHash);
     }
 
 private:
