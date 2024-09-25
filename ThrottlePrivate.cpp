@@ -36,7 +36,7 @@ void AbstractThrottle::taskThread()
 void AbstractThrottle::addTask(std::function<void ()> &&task)
 {
     std::lock_guard<std::mutex> guard(m_Mutex);
-    m_TaskQue.push_back(task);
+    m_TaskQue.push_back(std::move(task));
 
     //如果线程还没有启动,就启动线程处理任务队列
     if(!m_IsRunning.load())
@@ -63,7 +63,9 @@ void AsyncThrottle::processTask()
         task();
 }
 
-SyncThrottle::SyncThrottle(size_t interval):AbstractThrottle (interval){}
+SyncThrottle::SyncThrottle(size_t interval):AbstractThrottle (interval){
+    m_TargetThread = this->thread();
+}
 
 void SyncThrottle::processTask()
 {
@@ -76,5 +78,5 @@ void SyncThrottle::processTask()
     }
 
     if(task.operator bool() && m_TargetThread)
-        QMetaObject::invokeMethod(m_TargetThread,task);
+        QMetaObject::invokeMethod(m_TargetThread,std::move(task));
 }
