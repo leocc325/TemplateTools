@@ -97,36 +97,6 @@ public:
         t->addTask(std::move(task));
     }
 
-    ///移除对自由函数的节流控制
-    template<typename Func>
-    static typename std::enable_if<IsFreeFunc<Func>::value || IsStdFunction<Func>::value || IsCallable<Func>::value>::type
-    remove(Func func)
-    {
-        std::string funcAddress = getFunctionAddress(func);
-        std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        {
-            std::lock_guard<std::mutex> locker(mapMutex);
-            if(funcMap.count(funcHash)){
-                funcMap.erase(funcHash);
-            }
-        }
-    }
-
-    ///移除对成员函数的节流控制
-    template<typename Func,typename Obj>
-    static typename std::enable_if<IsMemberFunction<Func>::value>::type
-    remove(Func func,Obj* obj)
-    {
-        std::string funcAddress = getFunctionAddress(func,obj);
-        std::size_t funcHash = std::hash<std::string>{}(funcAddress);
-        {
-            std::lock_guard<std::mutex> locker(mapMutex);
-            if(funcMap.count(funcHash)){
-                funcMap.erase(funcHash);
-            }
-        }
-    }
-
 private:
     ///获取自由函数指针的地址,对于函数指针,通过获取函数指针地址的方式来获取唯一的标识符
     template <typename ReturnType,typename...Args>
