@@ -56,10 +56,18 @@ class Throttler
     template<typename T>
     struct IsCallable<T,VoidType<decltype(&T::operator())>>:std::true_type{};
 
+    template<typename Func>
+    struct CallableHelper{
+        constexpr static bool value =
+                IsFreeFunction<RawFunc<Func>>::value ||
+                IsStdFunction<RawFunc<Func>>::value ||
+                IsCallable<Func>::value;
+    };
+
 public:
     ///传入的函数会在单独的线程中执行,不建议调用GUI相关的函数
     template<typename Func,typename...Args>
-    static typename std::enable_if<IsFreeFunction<RawFunc<Func>>::value || IsStdFunction<RawFunc<Func>>::value || IsCallable<Func>::value>::type
+    static typename std::enable_if<CallableHelper<Func>::value>::type
     async(std::size_t time, Func func,Args&&...args)
     {
         AsyncThrottle* t = funcMapCheck<AsyncThrottle,Func>(time,func);
@@ -79,7 +87,7 @@ public:
 
     ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
     template<typename Func,typename...Args>
-    static typename std::enable_if<IsFreeFunction<RawFunc<Func>>::value || IsStdFunction<RawFunc<Func>>::value || IsCallable<Func>::value>::type
+    static typename std::enable_if<CallableHelper<Func>::value>::type
     sync(std::size_t time,Func func,Args&&...args)
     {
         SyncThrottle* t = funcMapCheck<SyncThrottle,Func>(time,func);
