@@ -14,8 +14,6 @@
 #include <QThread>
 #include <QDebug>
 
-#include "FunctionTraits.hpp"
-
 ///每一个函数都有一个与之对应的Throttle对象专门管理这个函数的调用
 class AbstractThrottle : public QObject
 {
