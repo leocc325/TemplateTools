@@ -1,8 +1,17 @@
 #include "ThrottlePrivate.hpp"
 
-AbstractThrottle::AbstractThrottle(size_t interval):m_Interval(interval){}
+AbstractThrottle::AbstractThrottle(size_t interval):m_Interval(interval)
+{
+    m_QuitFlag.store(false,std::memory_order_relaxed);
+    std::thread t(&AbstractThrottle::taskThread,this);
+    t.detach();
+}
 
-AbstractThrottle::~AbstractThrottle(){}
+AbstractThrottle::~AbstractThrottle()
+{
+    m_QuitFlag.store(true,std::memory_order_release);
+    m_CV.notify_one();
+}
 
 bool AbstractThrottle::isEmpty()
 {
@@ -12,39 +21,38 @@ bool AbstractThrottle::isEmpty()
 
 void AbstractThrottle::taskThread()
 {
-    m_IsRunning.store(true);
+    auto pred = [this](){
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        bool ret = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_LastCall) >= m_Interval;
+        //时间间隔超过设置值或者要退出while循环时均返回true
+        return ( ret || m_QuitFlag.load(std::memory_order_relaxed) );
+    };
+
     while (true)
     {
-        //每隔m_Interval毫秒处理一次任务队列,将队列中最后一个任务取出
-        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-        if(std::chrono::duration_cast<std::chrono::milliseconds>(now - m_LastCall) >= m_Interval)
+        if(!this->isEmpty())
         {
-            if(!this->isEmpty())
-            {
-                processTask();
-                m_LastCall = std::chrono::steady_clock::now();
-            }
-            else
-                break;//如果时间间隔大于m_Interval且任务队列为空,就可以退出线程
+            processTask();
+            m_LastCall = std::chrono::steady_clock::now();
         }
-        else
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        //一定要在这里判断退出标志位,避免m_QuitFlag设置为true时正在执行processTask(),这将会使notify不起作用导致break再次等待wait_for结束之后才执行
+        if(m_QuitFlag.load(std::memory_order_acquire))
+            break;
+
+        std::unique_lock<std::mutex> ulock(m_Mutex);
+        m_CV.wait_for(ulock,std::chrono::milliseconds(m_Interval),pred);
     }
-    m_IsRunning.store(false);
 }
 
 void AbstractThrottle::addTask(std::function<void ()> &&task)
 {
-    std::lock_guard<std::mutex> guard(m_Mutex);
-    m_TaskQue.push_back(std::move(task));
-
-    //如果线程还没有启动,就启动线程处理任务队列
-    if(!m_IsRunning.load())
     {
-        m_IsRunning.store(true);
-        std::thread t(&AbstractThrottle::taskThread,this);
-        t.detach();
+        std::lock_guard<std::mutex> guard(m_Mutex);
+        m_TaskQue.push_back(std::move(task));
     }
+
+    m_CV.notify_one();
 }
 
 AsyncThrottle::AsyncThrottle(size_t interval):AbstractThrottle (interval){}
