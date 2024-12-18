@@ -47,12 +47,16 @@ void AbstractThrottle::taskThread()
 
 void AbstractThrottle::addTask(std::function<void ()> &&task)
 {
+    bool notifyFlag = false;
     {
         std::lock_guard<std::mutex> guard(m_Mutex);
+        notifyFlag = m_TaskQue.empty();
         m_TaskQue.push_back(std::move(task));
     }
 
-    m_CV.notify_one();
+    //仅在任务队列为空的情况下才唤醒条件变量,避免频繁唤醒造成资源浪费
+    if(notifyFlag)
+        m_CV.notify_one();
 }
 
 AsyncThrottle::AsyncThrottle(size_t interval):AbstractThrottle (interval){}
