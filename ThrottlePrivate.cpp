@@ -22,26 +22,29 @@ bool AbstractThrottle::isEmpty()
 void AbstractThrottle::taskThread()
 {
     auto pred = [this](){
-        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-        bool ret = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_LastCall) >= m_Interval;
-        //时间间隔超过设置值或者要退出while循环时均返回true
-        return ( ret || m_QuitFlag.load(std::memory_order_relaxed) );
+        bool newTask = !m_TaskQue.empty();
+        bool quitFlag = m_QuitFlag.load(std::memory_order_relaxed);
+        return (newTask || quitFlag);
     };
 
-    while (true)
+    auto quit = [this](){
+        return m_QuitFlag.load(std::memory_order_relaxed);
+    };
+
+    while (!m_QuitFlag.load(std::memory_order_relaxed))
     {
-        if(!this->isEmpty())
+        if(this->isEmpty())
+        {
+            std::unique_lock<std::mutex> waitlock(m_Mutex);
+            m_CV.wait(waitlock,pred);
+        }
+        else
         {
             processTask();
-            m_LastCall = std::chrono::steady_clock::now();
+
+            std::unique_lock<std::mutex> delayLock(m_Mutex);
+            m_CV.wait_for(delayLock,std::chrono::milliseconds(m_Interval),quit);
         }
-
-        //一定要在这里判断退出标志位,避免m_QuitFlag设置为true时正在执行processTask(),这将会使notify不起作用导致break再次等待wait_for结束之后才执行
-        if(m_QuitFlag.load(std::memory_order_acquire))
-            break;
-
-        std::unique_lock<std::mutex> ulock(m_Mutex);
-        m_CV.wait_for(ulock,std::chrono::milliseconds(m_Interval),pred);
     }
 }
 
