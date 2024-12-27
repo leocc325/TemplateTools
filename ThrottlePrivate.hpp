@@ -18,7 +18,7 @@
 class AbstractThrottle : public QObject
 {
     friend class Throttler;
-    
+
 protected:
     AbstractThrottle(std::size_t interval);
     virtual ~AbstractThrottle();
@@ -34,7 +34,6 @@ protected:
     std::mutex m_Mutex;
     std::list<std::function<void()>> m_TaskQue;
     std::chrono::milliseconds m_Interval{1000};
-    std::chrono::steady_clock::time_point m_LastCall;
     std::atomic<bool> m_QuitFlag;
 };
 
