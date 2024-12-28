@@ -36,6 +36,7 @@ void AbstractThrottle::taskThread()
         if(this->isEmpty())
         {
             std::unique_lock<std::mutex> waitlock(m_Mutex);
+            if(m_TaskQue.empty()) break;
             m_CV.wait(waitlock,pred);
         }
         else
@@ -43,6 +44,7 @@ void AbstractThrottle::taskThread()
             processTask();
 
             std::unique_lock<std::mutex> delayLock(m_Mutex);
+            if(m_TaskQue.empty()) break;
             m_CV.wait_for(delayLock,std::chrono::milliseconds(m_Interval),quit);
         }
     }
