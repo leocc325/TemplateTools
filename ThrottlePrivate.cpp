@@ -9,7 +9,11 @@ AbstractThrottle::AbstractThrottle(size_t interval):m_Interval(interval)
 
 AbstractThrottle::~AbstractThrottle()
 {
-    m_QuitFlag.store(true,std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> guard(m_Mutex);
+        m_QuitFlag.store(true,std::memory_order_release);
+    }
+
     m_CV.notify_one();
 }
 
@@ -31,12 +35,12 @@ void AbstractThrottle::taskThread()
         return m_QuitFlag.load(std::memory_order_relaxed);
     };
 
-    while (!m_QuitFlag.load(std::memory_order_relaxed))
+    while (!quit())
     {
         if(this->isEmpty())
         {
             std::unique_lock<std::mutex> waitlock(m_Mutex);
-            if(m_TaskQue.empty()) break;
+            if(quit()) break;
             m_CV.wait(waitlock,pred);
         }
         else
@@ -44,7 +48,7 @@ void AbstractThrottle::taskThread()
             processTask();
 
             std::unique_lock<std::mutex> delayLock(m_Mutex);
-            if(m_TaskQue.empty()) break;
+            if(quit()) break;
             m_CV.wait_for(delayLock,std::chrono::milliseconds(m_Interval),quit);
         }
     }
