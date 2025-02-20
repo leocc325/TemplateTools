@@ -67,7 +67,18 @@ private:
 
             if(!m_Running.load(std::memory_order_relaxed))
             {
+                m_Running.store(true,std::memory_order_relaxed);
+                m_Interrupt.store(false,std::memory_order_relaxed);
                 m_Future = std::async(std::launch::async,&DelayTask::threadImpl,this);
+#if (ATOMIC_INT_LOCK_FREE == 1)
+    __GCC_ATOMIC_INT_LOCK_FREE;
+    /**
+     * 从这里可以看出ATOMIC_INT_LOCK_FREE在本地的实际值为1
+     * std::future在本地编译会报错,因为future文件中#define ATOMIC_INT_LOCK_FREE > 1 为false导致future相关的代码被屏蔽
+     * 但是在远程运行时打印出来的ATOMIC_INT_LOCK_FREE值为2,QT编译的moc文件中的__GCC_ATOMIC_INT_LOCK_FREE值也是2,不清楚为什么在IDE中会报错
+     * 程序可以远程运行,可能是本地环境和远程环境不一致导致的
+     **/
+#endif
             }
         }
     }
