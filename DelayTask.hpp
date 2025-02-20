@@ -14,18 +14,14 @@
 
 class DelayTask:public QObject
 {
-public:
+    friend class DelayTaskProcessor;
+private:
     template<typename Obj,typename Func>
     DelayTask(std::size_t delay,Obj* obj,Func func):
         m_HashValue(calculateHash(func,obj)),m_Delay(delay)
     {
         m_Running.store(false,std::memory_order_relaxed);
         m_Interrupt.store(false,std::memory_order_relaxed);
-
-        m_Thread = [=](){
-            //this->threadImpl();
-        };
-        m_Future = m_Thread.get_future();
     }
 
     ~DelayTask();
@@ -68,9 +64,10 @@ public:
             //如果线程正在执行,则只对任务函数进行更新,如果线程没有执行,则更新任务函数,随后启动线程
             std::unique_lock<std::mutex> lock(m_Mutex);
             m_Task = std::bind(func,obj,std::forward<Args>(args)...);
+
             if(!m_Running.load(std::memory_order_relaxed))
             {
-                m_Thread();
+                m_Future = std::async(std::launch::async,&DelayTask::threadImpl,this);
             }
         }
     }
@@ -78,7 +75,6 @@ public:
     ///停止正在执行的后台任务
     void stop();
 
-private:
     ///后台任务所执行的函数
     void threadImpl();
 
@@ -87,7 +83,6 @@ private:
     std::condition_variable m_CV;
     std::mutex m_Mutex;
     std::function<void()> m_Task;
-    std::packaged_task<void()> m_Thread;
     std::future<void> m_Future;
     std::size_t m_Delay;
     std::atomic<bool> m_Interrupt;
@@ -101,8 +96,8 @@ public:
     ~DelayTaskProcessor();
 
     ///添加一个任务,默认延时为0ms,当延时为0时直接在调用处执行task,延时不为0时开启线程等待任务执行,并最终将任务移动到DelayTask对象所在线程
-    template<typename Obj,typename Func>
-    std::size_t addTask(std::size_t delay,Obj* obj,Func func)
+    template<typename Func,typename Obj>
+    std::size_t addTask(std::size_t delay,Func func,Obj* obj)
     {
         DelayTask* task = new DelayTask(delay,obj,func);
         std::size_t hash = task->getHashValue();
