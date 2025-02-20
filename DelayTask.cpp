@@ -23,19 +23,23 @@ DelayTask::~DelayTask()
 
 void DelayTask::changeDelay(std::size_t mseconds)
 {
-    std::unique_lock<std::mutex> lock(m_Mutex);
-    m_Delay = mseconds;
-    m_Interrupt.store(true,std::memory_order_relaxed);
+    {
+        std::unique_lock<std::mutex> lock(m_Mutex);
+        m_Delay = mseconds;
+        m_Interrupt.store(true,std::memory_order_relaxed);
+    }
     m_CV.notify_one();
 }
 
 void DelayTask::stop()
 {
-    std::unique_lock<std::mutex> lock(m_Mutex);
     //如果后台任务正在执行则停止任务,否则什么都不干
     if(m_Running.load(std::memory_order_relaxed))
     {
-        m_Interrupt.store(true,std::memory_order_relaxed);
+        {
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            m_Interrupt.store(true,std::memory_order_relaxed);
+        }
         m_CV.notify_one();
     }
 }
@@ -45,10 +49,6 @@ void DelayTask::threadImpl()
     try
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
-
-        m_Running.store(true,std::memory_order_relaxed);
-        m_Interrupt.store(false,std::memory_order_relaxed);
-
         m_CV.wait_for(lock,std::chrono::milliseconds(m_Delay),[this](){
             return m_Interrupt.load(std::memory_order_relaxed);
         });
