@@ -1,4 +1,4 @@
-﻿#ifndef THREADPOOL_H
+#ifndef THREADPOOL_H
 #define THREADPOOL_H
 
 #include <atomic>
@@ -66,7 +66,6 @@ public:
                 lock.unlock();
 
                 task();
-
             }
         }
     }
@@ -89,10 +88,11 @@ public:
         Balanced//按线程池任务分布情况均匀地将任务分配给线程
     };
 
-    ThreadPool()
+    ThreadPool(unsigned size = 0)
     {
-        const unsigned threadCount = std::thread::hardware_concurrency();
-        for(unsigned i = 0; i < threadCount; i++)
+        if(size >  std::thread::hardware_concurrency() || size == 0)
+            size = std::thread::hardware_concurrency();
+        for(unsigned i = 0; i < size; i++)
         {
             m_Threads.push_back(new ThreadQueue());
         }
