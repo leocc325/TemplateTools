@@ -1,16 +1,65 @@
-
 #ifndef PARAMETERSERIALIZER_HPP
 #define PARAMETERSERIALIZER_HPP
 
 #include <limits>
 #include <type_traits>
 #include <utility>
+#include <memory>
 #include <vector>
 
+/**
+ *需要分三种通信协议情况：
+ * 情况一、数据帧长度固定为N,每一个数据占用1字节的长度,即长度为N的数据帧包含了N个数据
+ * 帧头：1字节
+ * 命令码：1字节
+ * 指令：1字节
+ * 校验：1字节
+ * 帧尾：1字节
+ * 
+ * 
+ * 情况二、数据帧长度固定为N,每一个数据占用的字节长度不等,长度N等于各个数据所占长度的和
+ * 帧头：1字节
+ * 命令码：1字节
+ * 指令：2字节
+ * 数据：4字节
+ * 校验：1字节
+ * 帧尾：1字节
+ * 
+ * 
+ * 情况三、数据帧长度不固定,中间会有一个长度变化的数据帧,例如下面的通信协议
+ * 帧头：1 字节
+ * 命令码：1 字节
+ * 数据长度：2 字节
+ * 数据：可变长度
+ * 校验和：2 字节
+ * 帧尾：1字节
+ * 
+ * 
+ * 以上三种情况的具体实现还需要分类，比如：数据按大端保存还是小端保存，是转换为数据帧还是从数据帧中读取某一个数据
+ */
+
+/**
+ * @brief The DataFrame class:一个完整的数据帧
+ */
+class DataFrame{
+    
+};
+
+/**
+ * @brief The DataPack class:数据帧中的数据包部分
+ */
+class DataPack{
+    
+};
+
+//template <unsigned Bytes>
+//struct ParameterSerializer{
+    
+//};
+        
 template <unsigned...Bytes>
-struct ParameterSerializer
+class ParameterSerializer
 {
-private:
     template<unsigned Byte,unsigned...RemainBytes>
     struct Length{
         static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
@@ -36,9 +85,6 @@ private:
         static constexpr bool value = (ArgNum==BytesNum) && IsInteger<Args...>::value;
     };
 
-    /**
-     *转换时始终从低位地址开始写入，所以大端就是先写入数据的高位，小端就是先写入数据的低位
-     */
     template<unsigned Byte,unsigned...RemainBytes>
     struct TransImpl
     {
@@ -91,7 +137,7 @@ private:
         }
     };
 
-public:    
+public:
     template<typename...Args>
     static typename std::enable_if<Matchable<sizeof... (Args),sizeof... (Bytes),Args...>::value,unsigned char*>::type
     transToBigEndian(Args...args)
@@ -108,5 +154,17 @@ public:
         return TransImpl<Bytes...>::littleEndian(data,0,std::forward<Args>(args)...);
     }
 };
+
+template <typename... Args>
+class Parameter {
+};
+
+template <unsigned...N,typename... Args>
+class Parameter {
+};
+
+void test(){
+    Parameter<1,2,3,double,4>;
+}
 
 #endif // PARAMETERSERIALIZER_HPP
