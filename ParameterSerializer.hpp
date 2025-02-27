@@ -6,6 +6,7 @@
 #include <utility>
 #include <memory>
 #include <vector>
+#include <QDebug>
 
 /**
  *需要分三种通信协议情况：
@@ -47,28 +48,28 @@ class FrameSerializer
     struct Length{
         static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
     };
-    
+
     template<unsigned Byte>
     struct Length<Byte>{
         static constexpr unsigned value = Byte;
     };
-    
+
     template<typename First,typename...Args>
     struct IsInteger{
         static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
     };
-    
+
     template<typename First>
     struct IsInteger<First>{
         static constexpr bool value = std::is_integral<First>::value;
     };
-    
+
     ///类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
     template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
     struct Matchable{
         static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
     };
-    
+
 public:
     template<unsigned...Bytes>
     class FixLengthFrame {
@@ -89,17 +90,16 @@ public:
         template<unsigned Byte> struct FixTransSingle
         {
             template<typename First,typename...Args>
-            static unsigned char* transImpl(unsigned char* data,unsigned pos,First first,Args...args)
+            static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
             {
                 data[pos] = static_cast<unsigned char>(first) & 0xFF ;
-                return FixTransSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
+                FixTransSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
             }
 
             template<typename Arg>
-            static unsigned char* transImpl(unsigned char* data,unsigned pos,Arg arg)
+            static void transImpl(unsigned char* data,unsigned pos,Arg arg)
             {
                 data[pos] = static_cast<unsigned char>(arg) & 0xFF ;
-                return data;
             }
         };
 
@@ -107,14 +107,14 @@ public:
         template<unsigned Byte,unsigned...RemainBytes> struct FixTrans
         {
             template<typename First,typename...Args>
-            static unsigned char* transImpl(unsigned char* data,unsigned pos,First first,Args...args)
+            static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
             {
                 for(unsigned i = 0; i < Byte; i++)
                 {
                     unsigned offset = (Mode == BigEndian) ? (Byte - i - 1) * __CHAR_BIT__ : (i * __CHAR_BIT__ );
                     data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
                 }
-                return FixTrans<RemainBytes...>::transImpl(data,pos+Byte,std::forward<Args>(args)...);
+                FixTrans<RemainBytes...>::transImpl(data,pos+Byte,std::forward<Args>(args)...);
             }
         };
 
@@ -122,14 +122,13 @@ public:
         template<unsigned Byte> struct FixTrans<Byte>
         {
             template<typename Arg>
-            static unsigned char* transImpl(unsigned char* data,unsigned pos,Arg arg)
+            static void transImpl(unsigned char* data,unsigned pos,Arg arg)
             {
                 for(int unsigned i = 0; i < Byte; i++)
                 {
                     unsigned offset = (Mode == BigEndian) ? (Byte - i - 1) * __CHAR_BIT__ : (i * __CHAR_BIT__ );
                     data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
                 }
-                return data;
             }
         };
 
@@ -144,7 +143,8 @@ public:
             static_assert (Matchable<ClassArgSize,sizeof... (Args),Args...>::value,"error");
 
             unsigned char* data = new unsigned char[FrameLength];
-            return FixTrans<Bytes...>::transImpl(data,0,std::forward<Args>(args)...);
+            FixTrans<Bytes...>::transImpl(data,0,std::forward<Args>(args)...);
+            return data;
         }
 
         ///总长度固定,单个数据长度1字节的转换
@@ -156,7 +156,8 @@ public:
             static_assert (sizeof... (Args) == FrameLength,"error");
 
             unsigned char* data = new unsigned char[FrameLength];
-            return FixTransSingle<Bytes...>::transImpl(data,0,std::forward<Args>(args)...);
+            FixTransSingle<Bytes...>::transImpl(data,0,std::forward<Args>(args)...);
+            return data;
         }
 
     };
