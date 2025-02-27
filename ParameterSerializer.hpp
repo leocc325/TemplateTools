@@ -38,118 +38,37 @@
  * 以上三种情况的具体实现还需要分类，比如：数据按大端保存还是小端保存，是转换为数据帧还是从数据帧中读取某一个数据
  */
 
-/**
- *ParameterSerializer用于表示固定长度数据帧,当模板参数数量为1时会被判定为是情况1,当模板参数数量为多个时,huibei
- */
-
-template<unsigned Byte,unsigned...RemainBytes>
-struct Length{
-    static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
-};
-
-template<unsigned Byte>
-struct Length<Byte>{
-    static constexpr unsigned value = Byte;
-};
-
-template<typename First,typename...Args>
-struct IsInteger{
-    static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
-};
-
-template<typename First>
-struct IsInteger<First>{
-    static constexpr bool value = std::is_integral<First>::value;
-};
-
-///类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
-template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
-struct Matchable{
-    static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
-};
-
-template <unsigned...Bytes>
-class ParameterSerializer
-{
-    template<unsigned Byte,unsigned...RemainBytes>
-    struct TransImpl
-    {
-        template<typename First,typename...Args>
-        static unsigned char* bigEndian(unsigned char* data,unsigned pos,First first,Args...args)
-        {
-            for(unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = i * __CHAR_BIT__;
-                data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
-            }
-            return TransImpl<RemainBytes...>::bigEndian(data,pos+Byte,std::forward<Args>(args)...);
-        }
-
-        template<typename First,typename...Args>
-        static unsigned char* littleEndian(unsigned char* data,unsigned pos,First first,Args...args)
-        {
-            for(unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (Byte - i - 1) * __CHAR_BIT__;
-                data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
-            }
-            return TransImpl<RemainBytes...>::littleEndian(data,pos+Byte,std::forward<Args>(args)...);
-        }
-    };
-
-    template<unsigned Byte>
-    struct TransImpl<Byte>
-    {
-        template<typename Arg>
-        static unsigned char* bigEndian(unsigned char* data,unsigned pos,Arg arg)
-        {
-            for(int unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = i * __CHAR_BIT__;
-                data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
-            }
-            return data;
-        }
-
-        template<typename Arg>
-        static unsigned char* littleEndian(unsigned char* data,unsigned pos,Arg arg)
-        {
-            for(int unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (Byte - i - 1) * __CHAR_BIT__;
-                data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
-            }
-            return data;
-        }
-    };
-
-public:
-    template<typename...Args>
-    static typename std::enable_if<Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,unsigned char*>::type
-    transToBigEndian(Args...args)
-    {
-        unsigned char* data = new unsigned char[Length<Bytes...>::value];
-        return TransImpl<Bytes...>::bigEndian(data,0,std::forward<Args>(args)...);
-    }
-
-    template<typename...Args>
-    static typename std::enable_if<Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,unsigned char*>::type
-    transToLittleEndian(Args...args)
-    {
-        unsigned char* data = new unsigned char[Length<Bytes...>::value];
-        return TransImpl<Bytes...>::littleEndian(data,0,std::forward<Args>(args)...);
-    }
-};
-
-/**
- * @brief The ByteMode enum ---------------------------------------------------------------------------------------------------------
- */
-
 enum ByteMode {BigEndian,LittleEndian};
 
 template<ByteMode Mode = BigEndian>
 class FrameSerializer
 {
+    template<unsigned Byte,unsigned...RemainBytes>
+    struct Length{
+        static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
+    };
+    
+    template<unsigned Byte>
+    struct Length<Byte>{
+        static constexpr unsigned value = Byte;
+    };
+    
+    template<typename First,typename...Args>
+    struct IsInteger{
+        static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
+    };
+    
+    template<typename First>
+    struct IsInteger<First>{
+        static constexpr bool value = std::is_integral<First>::value;
+    };
+    
+    ///类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
+    template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
+    struct Matchable{
+        static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
+    };
+    
 public:
     template<unsigned...Bytes>
     class FixLengthFrame {
@@ -192,7 +111,7 @@ public:
             {
                 for(unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (Mode == BigEndian) ? (i * __CHAR_BIT__ ) : (Byte - i - 1) * __CHAR_BIT__;
+                    unsigned offset = (Mode == BigEndian) ? (Byte - i - 1) * __CHAR_BIT__ : (i * __CHAR_BIT__ );
                     data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
                 }
                 return FixTrans<RemainBytes...>::transImpl(data,pos+Byte,std::forward<Args>(args)...);
@@ -207,7 +126,7 @@ public:
             {
                 for(int unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (Mode == BigEndian) ? (i * __CHAR_BIT__ ) : (Byte - i - 1) * __CHAR_BIT__;
+                    unsigned offset = (Mode == BigEndian) ? (Byte - i - 1) * __CHAR_BIT__ : (i * __CHAR_BIT__ );
                     data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
                 }
                 return data;
@@ -250,8 +169,11 @@ private:
 };
 
 void test(){
-    FrameSerializer<BigEndian>::FixLengthFrame<4>::trans(4,5,6,7);
-    FrameSerializer<BigEndian>::FixLengthFrame<1,1,2,3>::trans(4,5,6,7);
+    auto d1 = FrameSerializer<BigEndian>::FixLengthFrame<4>::trans(0x04,0x05,0x06,0x07);
+    auto d2 = FrameSerializer<BigEndian>::FixLengthFrame<1,1,2,3>::trans(0x12,0x34,0x56,0x78);
+    auto d3 = FrameSerializer<BigEndian>::FixLengthFrame<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
+    auto d4 = FrameSerializer<LittleEndian>::FixLengthFrame<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
+    int a = 10;
 }
 
 #endif // PARAMETERSERIALIZER_HPP
