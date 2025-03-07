@@ -5,6 +5,7 @@
 #include <utility>
 #include <memory>
 #include <vector>
+#include <bitset>
 
 /**
  *需要分三种通信协议情况：
@@ -37,10 +38,13 @@
  * 以上三种情况的具体实现还需要分类，比如：数据按大端保存还是小端保存，是转换为数据帧还是从数据帧中读取某一个数据
  */
 
+namespace FrameSerializer
+{
+
 enum ByteMode {Big,Little};
 
 template<unsigned...Bytes>
-class Fixed
+class FixedFrame
 {
 private:
     template<unsigned Byte,unsigned...RemainBytes>
@@ -120,27 +124,27 @@ private:
 public:
     ///总长度固定,单个数据长度可变的转换
     template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,unsigned char*>::type
+    static typename std::enable_if<!OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
     trans(Args...args)
     {
         ///判断参数数量、字节长度、和模板参数长度是否一致
         static_assert (Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,"error");
 
-        unsigned char* data = new unsigned char[Length<Bytes...>::value];
-        FixTrans<Bytes...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
+        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
+        FixTrans<Bytes...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
         return data;
     }
 
     ///总长度固定,单个数据长度1字节的转换
     template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,unsigned char*>::type
+    static typename std::enable_if<OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
     trans(Args...args)
     {
         ///判断参数数量和模板指定的帧长度是否一致
         static_assert (sizeof... (Args) == Length<Bytes...>::value,"error");
 
-        unsigned char* data = new unsigned char[Length<Bytes...>::value];
-        FixTransSingle<Bytes...>::transImpl(data,0,std::forward<Args>(args)...);
+        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
+        FixTransSingle<Bytes...>::transImpl(data.get(),0,std::forward<Args>(args)...);
         return data;
     }
 
@@ -150,17 +154,61 @@ template<template<unsigned...N1> class F1,typename T,template<unsigned...N2> cla
 class Variable {
 };
 
-void test(){
-    auto d1 = Fixed<4>::trans<Big>(0x04,0x05,0x06,0x07);
-    auto d2 = Fixed<1,1,2,3>::trans<Big>(0x12,0x34,0x56,0x78);
-    auto d3 = Fixed<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
-    auto d4 = Fixed<2,1,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d5 = Fixed<1,2,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d6 = Fixed<1,1,2,2>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d7 = Fixed<1,1,2,4>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d8 = Fixed<1,3,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d9 = Fixed<1,4,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+/**
+ *对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+ *函数无法保证线程安全,也无法保证索引越界安全
+ */
+template <unsigned Bytes,ByteMode Mode = Big>
+static void checkSum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+{
+    unsigned long long sum = 0;
+    for(; start <= end; ++start)
+    {
+        sum += data[start];
+    }
+
+    std::bitset<Bytes*8> bits(sum);
+    for(unsigned index = 0; index < Bytes; index++)
+    {
+        unsigned char value = static_cast<unsigned char>(bits >> (8 * index)) & 0xFF;
+        if(Mode == Big)
+        {
+             data[pos+Bytes-index-1] = value;
+        }
+        else
+        {
+            data[pos+index] = value;
+        }
+    }
+}
+
+/**
+ *对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+ *函数无法保证线程安全,也无法保证索引越界安全
+ */
+template <unsigned Bytes,ByteMode Mode = Big>
+static void checkCrc(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+{
+
+}
+
+static void test(){
+    std::bitset<4> b(1000);
+    unsigned char b1 = b.to_ulong();
+    unsigned char b2 = unsigned(1000);
+    auto d1 = FixedFrame<4>::trans<Big>(0x04,0x05,0x06,0x07);
+    auto d11 = d1.get();
+    auto d2 = FixedFrame<1,1,2,3>::trans<Big>(0x12,0x34,0x56,0x78);
+    auto d3 = FixedFrame<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
+    auto d4 = FixedFrame<2,1,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+    auto d5 = FixedFrame<1,2,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+    auto d6 = FixedFrame<1,1,2,2>::trans<Little>(0x12,0x34,0x5678,0x112233);
+    auto d7 = FixedFrame<1,1,2,4>::trans<Little>(0x12,0x34,0x5678,0x112233);
+    auto d8 = FixedFrame<1,3,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+    auto d9 = FixedFrame<1,4,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
     int a = 10;
+}
+
 }
 
 #endif // PARAMETERSERIALIZER_HPP
