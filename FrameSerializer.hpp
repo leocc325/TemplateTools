@@ -5,7 +5,6 @@
 #include <utility>
 #include <memory>
 #include <vector>
-#include <bitset>
 
 /**
  *需要分三种通信协议情况：
@@ -40,174 +39,214 @@
 
 namespace FrameSerializer
 {
+    enum ByteMode {Big,Little};
 
-enum ByteMode {Big,Little};
-
-template<unsigned...Bytes>
-class FixedFrame
-{
-private:
-    template<unsigned Byte,unsigned...RemainBytes>
-    struct Length{
-        static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
-    };
-
-    template<unsigned Byte>
-    struct Length<Byte>{
-        static constexpr unsigned value = Byte;
-    };
-
-    template<typename First,typename...Args>
-    struct IsInteger{
-        static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
-    };
-
-    template<typename First>
-    struct IsInteger<First>{
-        static constexpr bool value = std::is_integral<First>::value;
-    };
-
-    ///类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
-    template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
-    struct Matchable{
-        static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
-    };
-
-    ///如果表示每一个数据所占字节大小的模板参数数量为1，而且字节长度总数等于实际参数数量，则认为这是符合情况1的
-    template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
-    struct OneBytePerArg{
-        static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
-    };
-
-    ///情况1:数据帧长度固定为N,每一个数据占用1字节的长度时调用此递归模板
-    template<unsigned Byte> struct FixTransSingle
+    template<unsigned...Bytes>
+    class FixedFrame
     {
+    private:
+        template<unsigned Byte,unsigned...RemainBytes>
+        struct Length{
+            static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
+        };
+
+        template<unsigned Byte>
+        struct Length<Byte>{
+            static constexpr unsigned value = Byte;
+        };
+
         template<typename First,typename...Args>
-        static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
+        struct IsInteger{
+            static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
+        };
+
+        template<typename First>
+        struct IsInteger<First>{
+            static constexpr bool value = std::is_integral<First>::value;
+        };
+
+        ///类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
+        template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
+        struct Matchable{
+            static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
+        };
+
+        ///如果表示每一个数据所占字节大小的模板参数数量为1，而且字节长度总数等于实际参数数量，则认为这是符合情况1的
+        template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
+        struct OneBytePerArg{
+            static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
+        };
+
+        ///情况1:数据帧长度固定为N,每一个数据占用1字节的长度时调用此递归模板
+        template<unsigned Byte> struct FixTransSingle
         {
-            data[pos] = static_cast<unsigned char>(first) & 0xFF ;
-            FixTransSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
+            template<typename First,typename...Args>
+            static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
+            {
+                data[pos] = static_cast<unsigned char>(first) & 0xFF ;
+                FixTransSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
+            }
+
+            template<typename Arg>
+            static void transImpl(unsigned char* data,unsigned pos,Arg arg)
+            {
+                data[pos] = static_cast<unsigned char>(arg) & 0xFF ;
+            }
+        };
+
+        ///情况2:数据帧长度固定为N,每一个数据占用的字节长度不等时调用此递归模板FixTrans
+        template<unsigned Byte,unsigned...RemainBytes>
+        struct FixTrans
+        {
+            template<typename First,typename...Args> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,First first,Args...args)
+            {
+                for(unsigned i = 0; i < Byte; i++)
+                {
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i *8 );
+                    data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
+                }
+                FixTrans<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
+            }
+
+            ///只剩下最后一个参数时递归模板终止
+            template<typename Arg> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,Arg arg)
+            {
+                for(int unsigned i = 0; i < Byte; i++)
+                {
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i * 8 );
+                    data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
+                }
+            }
+        };
+
+    public:
+        ///总长度固定,单个数据长度可变的转换
+        template<ByteMode Mode = Big,typename...Args>
+        static typename std::enable_if<!OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+        trans(Args...args)
+        {
+            ///判断参数数量、字节长度、和模板参数长度是否一致
+            static_assert (Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,"error");
+
+            std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
+            FixTrans<Bytes...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
+            return data;
         }
 
-        template<typename Arg>
-        static void transImpl(unsigned char* data,unsigned pos,Arg arg)
+        ///总长度固定,单个数据长度1字节的转换
+        template<ByteMode Mode = Big, typename...Args>
+        static typename std::enable_if<OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+        trans(Args...args)
         {
-            data[pos] = static_cast<unsigned char>(arg) & 0xFF ;
+            ///判断参数数量和模板指定的帧长度是否一致
+            static_assert (sizeof... (Args) == Length<Bytes...>::value,"error");
+
+            std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
+            FixTransSingle<Bytes...>::transImpl(data.get(),0,std::forward<Args>(args)...);
+            return data;
+        }
+
+    };
+
+    ///unused
+    template<template<unsigned...N1> class F1,typename T,template<unsigned...N2> class F2>
+    class VariableFrame {};
+
+    class Check
+    {
+        ///当前允许的校验结果最大字节数
+        static constexpr unsigned maxDataSize = 8;
+
+        enum DataSize{oneByte,fourByte,eightByte};
+
+        static constexpr  DataSize ByteWidthArray[maxDataSize] = {oneByte,fourByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
+
+        template<unsigned Bytes>struct DataType{using type = void;};
+
+        template<> struct DataType<oneByte>{using type = unsigned char;};
+
+        template<> struct DataType<fourByte>{using type = unsigned;};
+
+        template<> struct DataType<eightByte>{using type = unsigned long long;};
+
+        template<typename T,unsigned Bytes>
+        static void writeCheckValue(ByteMode mode,unsigned char* data,T checkRet,unsigned pos)
+        {
+            for(unsigned index = 0; index < Bytes; index++)
+            {
+                unsigned char value = static_cast<unsigned char>(checkRet >> (8 * index)) & 0xFF;
+                if(mode == Big){
+                     data[pos+Bytes-index-1] = value;
+                }
+                else{
+                    data[pos+index] = value;
+                }
+            }
+        }
+
+    public:
+        ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+        ///函数无法保证线程安全,也无法保证索引越界安全
+        template <unsigned Bytes,ByteMode Mode = Big>
+        static typename std::enable_if<(Bytes <= maxDataSize),void>::type
+        sum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        {
+            using ValueType = typename DataType<ByteWidthArray[Bytes]>::type;
+
+            ValueType  sum = 0;
+            for(; start <= end; ++start){
+                sum += data[start];
+            }
+
+            writeCheckValue<ValueType,Bytes>(Mode,data,sum,pos);
+        }
+
+        /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+        /// 函数无法保证线程安全,也无法保证索引越界安全
+        template <unsigned Bytes,ByteMode Mode = Big>
+        static typename std::enable_if<(Bytes <= maxDataSize),void>::type
+        crc_8(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        {
+            unsigned short crc = 0xFFFF;  // 初始值通常是0xFFFF
+            unsigned char polynomial = 0x07;  // CRC-8标准多项式
+
+            for (; start <= end; ++start)
+            {
+                    crc ^= data[start];  // 把数据字节与当前CRC值异或
+                    for (int i = 0; i < 8; ++i)
+                    {
+                        if (crc & 0x80) // 检查最高位是否为1
+                            crc =  static_cast<unsigned char>(crc << 1) ^ polynomial;  // 左移并异或多项式
+                        else
+                            crc <<= 1;  // 否则只是左移
+                    }
+                }
+
+            writeCheckValue<typename DataType<ByteWidthArray[Bytes]>::type,Bytes>(Mode,data,sum,pos);
+        }
+
+        template <unsigned Bytes,ByteMode Mode = Big>
+        static typename std::enable_if<(Bytes <= maxDataSize),void>::type
+        crc_16(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        {
+
         }
     };
 
-    ///情况2:数据帧长度固定为N,每一个数据占用的字节长度不等时调用此递归模板FixTrans
-    template<unsigned Byte,unsigned...RemainBytes>
-    struct FixTrans
-    {
-        template<typename First,typename...Args> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,First first,Args...args)
-        {
-            for(unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i *8 );
-                data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
-            }
-            FixTrans<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
-        }
+    static void test(){
 
-        ///只剩下最后一个参数时递归模板终止
-        template<typename Arg> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,Arg arg)
-        {
-            for(int unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i * 8 );
-                data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
-            }
-        }
-    };
-
-public:
-    ///总长度固定,单个数据长度可变的转换
-    template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
-    trans(Args...args)
-    {
-        ///判断参数数量、字节长度、和模板参数长度是否一致
-        static_assert (Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,"error");
-
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
-        FixTrans<Bytes...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
-        return data;
+        auto d1 = FixedFrame<4>::trans<Big>(0x04,0x05,0x06,0x07);
+        auto d11 = d1.get();
+        auto d2 = FixedFrame<1,1,2,3>::trans<Big>(0x12,0x34,0x56,0x78);
+        auto d3 = FixedFrame<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
+        auto d4 = FixedFrame<2,1,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        auto d5 = FixedFrame<1,2,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        auto d6 = FixedFrame<1,1,2,2>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        auto d7 = FixedFrame<1,1,2,4>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        auto d8 = FixedFrame<1,3,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        auto d9 = FixedFrame<1,4,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
+        int a = 10;
     }
-
-    ///总长度固定,单个数据长度1字节的转换
-    template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
-    trans(Args...args)
-    {
-        ///判断参数数量和模板指定的帧长度是否一致
-        static_assert (sizeof... (Args) == Length<Bytes...>::value,"error");
-
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
-        FixTransSingle<Bytes...>::transImpl(data.get(),0,std::forward<Args>(args)...);
-        return data;
-    }
-
-};
-
-template<template<unsigned...N1> class F1,typename T,template<unsigned...N2> class F2>
-class Variable {
-};
-
-/**
- *对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
- *函数无法保证线程安全,也无法保证索引越界安全
- */
-template <unsigned Bytes,ByteMode Mode = Big>
-static void checkSum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
-{
-    unsigned long long sum = 0;
-    for(; start <= end; ++start)
-    {
-        sum += data[start];
-    }
-
-    std::bitset<Bytes*8> bits(sum);
-    for(unsigned index = 0; index < Bytes; index++)
-    {
-        unsigned char value = static_cast<unsigned char>(bits >> (8 * index)) & 0xFF;
-        if(Mode == Big)
-        {
-             data[pos+Bytes-index-1] = value;
-        }
-        else
-        {
-            data[pos+index] = value;
-        }
-    }
-}
-
-/**
- *对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
- *函数无法保证线程安全,也无法保证索引越界安全
- */
-template <unsigned Bytes,ByteMode Mode = Big>
-static void checkCrc(unsigned char* data,unsigned start,unsigned end,unsigned pos)
-{
-
-}
-
-static void test(){
-    std::bitset<4> b(1000);
-    unsigned char b1 = b.to_ulong();
-    unsigned char b2 = unsigned(1000);
-    auto d1 = FixedFrame<4>::trans<Big>(0x04,0x05,0x06,0x07);
-    auto d11 = d1.get();
-    auto d2 = FixedFrame<1,1,2,3>::trans<Big>(0x12,0x34,0x56,0x78);
-    auto d3 = FixedFrame<1,1,2,3>::trans(0x12,0x34,0x5678,0x112233);
-    auto d4 = FixedFrame<2,1,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d5 = FixedFrame<1,2,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d6 = FixedFrame<1,1,2,2>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d7 = FixedFrame<1,1,2,4>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d8 = FixedFrame<1,3,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    auto d9 = FixedFrame<1,4,2,3>::trans<Little>(0x12,0x34,0x5678,0x112233);
-    int a = 10;
-}
 
 }
 
