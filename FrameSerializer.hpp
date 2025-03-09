@@ -147,7 +147,7 @@ namespace FrameSerializer
     template<template<unsigned...N1> class F1,typename T,template<unsigned...N2> class F2>
     class VariableFrame {};
 
-    class Check
+    class FrameCheck
     {
         ///位反转模板函数
         template<typename T>
@@ -165,7 +165,6 @@ namespace FrameSerializer
         template<unsigned Bytes>
         static void writeCheckValue(ByteMode mode,unsigned char* data,DT<Bytes> check,unsigned pos)
         {
-            return;
             for(unsigned index = 0; index < Bytes; index++)
             {
                 unsigned char value = static_cast<unsigned char>(check >> (CHAR_BIT * index)) & 0xFF;
@@ -177,7 +176,6 @@ namespace FrameSerializer
         }
 
         /**
-         *参考: https://github.com/whik/crc-lib-c
          *crcbits:crc寄存器位宽
          *CrcDT:crc寄存器变量类型
          *poly:多项式,不同的CRC标准使用不同的多项式。
@@ -187,7 +185,7 @@ namespace FrameSerializer
          *refOut:输出是否反转,即最终的CRC值是否需要按位反转。
          *
          * note:这个模板不是通过crc原理完成的,模板最初只完成了针对8位及8位以上的crc校验,后续为了将不足8位的crc校验也兼容进来
-         * 参考https://github.com/whik/crc-lib-c 一边debug一边修改函数
+         * 后续是参考https://github.com/whik/crc-lib-c 一边debug一边修改函的
          * 所以我也不清楚有些地方为什么要那样写代码,代码中用note标记的地方就是我也不太清楚原理的部分
          * but! 代码能正常工作!
          */
@@ -209,7 +207,7 @@ namespace FrameSerializer
             poly =  static_cast<CrcDT>(poly << crcOffset);/**note**/
             crc = static_cast<CrcDT>(crc << crcOffset);/**note**/
 
-            // 遍历数据范围
+            // 遍历数据
             for (unsigned i = start; i <= end; ++i)
             {
                 unsigned char byte = refIn ? reverse_bits<unsigned char>(data[i]) : data[i];// 输入反转处理
@@ -249,7 +247,6 @@ namespace FrameSerializer
         }
 
         /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
-
         template <unsigned Bytes = 1,ByteMode mode = Big>
         static FunctionReturn<Bytes> crc4_itu(unsigned char* data,unsigned start,unsigned end,unsigned pos)
         {
@@ -416,29 +413,29 @@ namespace FrameSerializer
         auto d1 = FixedFrame<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
         unsigned char* data = d1.get();
 
-        Check::crc4_itu(data,0,7,7);//0x05
-        Check::crc5_epc(data,0,7,7);//0x0f
-        Check::crc5_itu(data,0,7,7);//0x05
-        Check::crc5_usb(data,0,7,7);
-        Check::crc6_itu(data,0,7,7);
-        Check::crc7_mmc(data,0,7,7);
-        Check::crc8(data,0,7,7);
-        Check::crc8_itu(data,0,7,7);
-        Check::crc8_rohc(data,0,7,7);
-        Check::crc8_maxim(data,0,7,7);
-        Check::crc16_dnp(data,0,7,7);
-        Check::crc16_ibm(data,0,7,7);
-        Check::crc16_usb(data,0,7,7);
-        Check::crc16_x25(data,0,7,7);
-        Check::crc16_ccitt(data,0,7,7);
-        Check::crc16_maxim(data,0,7,7);
-        Check::crc16_modbus(data,0,7,7);
-        Check::crc16_xmodem(data,0,7,7);
-        Check::crc16_ccitt_false(data,0,7,7);
-        Check::crc32(data,0,7,7);
-        Check::crc32_c(data,0,7,7);
-        Check::crc32_mpeg2(data,0,7,7);
-        Check::crc32_koopman(data,0,7,7);
+        FrameCheck::crc4_itu(data,0,7,7);//0x05
+        FrameCheck::crc5_epc(data,0,7,7);//0x0f
+        FrameCheck::crc5_itu(data,0,7,7);//0x05
+        FrameCheck::crc5_usb(data,0,7,7);
+        FrameCheck::crc6_itu(data,0,7,7);
+        FrameCheck::crc7_mmc(data,0,7,7);
+        FrameCheck::crc8(data,0,7,7);
+        FrameCheck::crc8_itu(data,0,7,7);
+        FrameCheck::crc8_rohc(data,0,7,7);
+        FrameCheck::crc8_maxim(data,0,7,7);
+        FrameCheck::crc16_dnp(data,0,7,7);
+        FrameCheck::crc16_ibm(data,0,7,7);
+        FrameCheck::crc16_usb(data,0,7,7);
+        FrameCheck::crc16_x25(data,0,7,7);
+        FrameCheck::crc16_ccitt(data,0,7,7);
+        FrameCheck::crc16_maxim(data,0,7,7);
+        FrameCheck::crc16_modbus(data,0,7,7);
+        FrameCheck::crc16_xmodem(data,0,7,7);
+        FrameCheck::crc16_ccitt_false(data,0,7,7);
+        FrameCheck::crc32(data,0,7,7);
+        FrameCheck::crc32_c(data,0,7,7);
+        FrameCheck::crc32_mpeg2(data,0,7,7);
+        FrameCheck::crc32_koopman(data,0,7,7);
     }
 
 }
