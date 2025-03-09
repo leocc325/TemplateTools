@@ -6,36 +6,6 @@
 #include <memory>
 #include <vector>
 
-/**
- *需要分三种通信协议情况：
- * 情况一、数据帧长度固定为N,每一个数据占用1字节的长度,即长度为N的数据帧包含了N个数据
- * 帧头：1字节
- * 命令码：1字节
- * 指令：1字节
- * 校验：1字节
- * 帧尾：1字节
- *
- *
- * 情况二、数据帧长度固定为N,每一个数据占用的字节长度不等,长度N等于各个数据所占长度的和
- * 帧头：1字节
- * 命令码：1字节
- * 指令：2字节
- * 数据：4字节
- * 校验：1字节
- * 帧尾：1字节
- *
- *
- * 情况三、数据帧长度不固定,中间会有一个长度变化的数据帧,例如下面的通信协议
- * 帧头：1 字节
- * 命令码：1 字节
- * 数据长度：2 字节
- * 数据：可变长度
- * 校验和：2 字节
- * 帧尾：1字节
- *
- *
- * 以上三种情况的具体实现还需要分类，比如：数据按大端保存还是小端保存，是转换为数据帧还是从数据帧中读取某一个数据
- */
 #include <QDebug>
 namespace FrameSerializer
 {
@@ -129,7 +99,7 @@ namespace FrameSerializer
             {
                 for(unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i *8 );
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CHAR_BIT : (i *CHAR_BIT );
                     data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
                 }
                 FixTrans<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
@@ -140,7 +110,7 @@ namespace FrameSerializer
             {
                 for(int unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (mode == Big) ? (Byte - i - 1) * 8 : (i * 8 );
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CHAR_BIT : (i * CHAR_BIT );
                     data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
                 }
             }
@@ -187,7 +157,7 @@ namespace FrameSerializer
             T reversed = 0;
             for (size_t i = 0; i < bits; ++i)
             {
-                reversed = (reversed << 1) | ((value >> i) & 1);
+                reversed = static_cast<T>(reversed << 1) | ((value >> i) & 1);
             }
             return reversed;
         }
@@ -198,7 +168,7 @@ namespace FrameSerializer
             return;
             for(unsigned index = 0; index < Bytes; index++)
             {
-                unsigned char value = static_cast<unsigned char>(check >> (8 * index)) & 0xFF;
+                unsigned char value = static_cast<unsigned char>(check >> (CHAR_BIT * index)) & 0xFF;
                 if(mode == Big)
                      data[pos+Bytes-index-1] = value;
                 else
@@ -208,38 +178,61 @@ namespace FrameSerializer
 
         /**
          *参考: https://github.com/whik/crc-lib-c
-         *crcbits: CRC结果所占位数
-         *CrcDT：CRC的数据类型，比如uint8_t、uint16_t等
-         *poly：多项式，即生成多项式，不同的CRC标准使用不同的多项式。
-         *init：初始值，计算CRC前的初始值。
-         *xorOut：最终异或值，计算完成后与结果异或的值。
-         *refIn：输入是否反转，即每个字节是否需要按位反转后再处理。
-         *refOut：输出是否反转，即最终的CRC值是否需要按位反转。
+         *crcbits:crc寄存器位宽
+         *CrcDT:crc寄存器变量类型
+         *poly:多项式,不同的CRC标准使用不同的多项式。
+         *init:crc初始值
+         *xorOut:最终异或值,计算完成后与结果异或的值。
+         *refIn:输入是否反转,即每个字节是否需要按位反转后再处理。
+         *refOut:输出是否反转,即最终的CRC值是否需要按位反转。
+         *
+         * note:这个模板不是通过crc原理完成的,模板最初只完成了针对8位及8位以上的crc校验,后续为了将不足8位的crc校验也兼容进来
+         * 参考https://github.com/whik/crc-lib-c 一边debug一边修改函数
+         * 所以我也不清楚有些地方为什么要那样写代码,代码中用note标记的地方就是我也不太清楚原理的部分
+         * but! 代码能正常工作!
          */
-        template<unsigned bits,typename CrcDT,CrcDT poly,CrcDT init,CrcDT xorOut,bool refIn,bool refOut>
+        template<int crcbits,typename CrcDT,CrcDT polynomial,CrcDT init,CrcDT xorOut,bool refIn,bool refOut>
         static CrcDT crcImpl(unsigned char* data,unsigned start,unsigned end)
         {
             CrcDT crc =  init;
-            constexpr size_t crcbits = sizeof(CrcDT) * CHAR_BIT;
-            constexpr CrcDT topbit = static_cast<CrcDT>(1) << (crcbits - 1);
+            CrcDT poly = polynomial;
 
-            //根据当前crc数据类型所占位数计算字节偏移
-            constexpr unsigned offset =  (crcbits - CHAR_BIT);
+            constexpr unsigned crcSize = sizeof (CrcDT) * CHAR_BIT;//crc变量总位数
+            constexpr CrcDT topbit = static_cast<CrcDT>(1) << (crcSize - 1); //crc最高位为1时的值
+
+            //如果crc位数不是8的整倍数,需要将crc右端补0
+            constexpr int crcOffset = (crcbits % CHAR_BIT) ?  CHAR_BIT - (crcbits % CHAR_BIT) : 0;
+            //对输入数据每一个字节右端补0
+            constexpr int byteOffset = crcSize - CHAR_BIT;
+
+            //如果crc位宽不是8的整倍数,需要对多项式和crc初始值左移crcOffset位
+            poly =  static_cast<CrcDT>(poly << crcOffset);/**note**/
+            crc = static_cast<CrcDT>(crc << crcOffset);/**note**/
 
             // 遍历数据范围
             for (unsigned i = start; i <= end; ++i)
             {
                 unsigned char byte = refIn ? reverse_bits<unsigned char>(data[i]) : data[i];// 输入反转处理
-                crc  = crc ^ (static_cast<CrcDT>(byte) << offset);// 合并当前字节到 CRC 寄存器
+                crc  = static_cast<CrcDT>( crc ^ (static_cast<CrcDT>(byte) << byteOffset) );// 将当前字节反转之后再进行左移和CRC对齐(相当于右端补零),随后与crc异或
 
                 for (int j = 0; j < CHAR_BIT; ++j)
                 {
-                        crc = (crc & topbit) ? ( (crc << 1) ^ poly ) : (crc << 1);// 左移处理（MSB 优先）
+                    if(crc & topbit)
+                        crc =  static_cast<CrcDT>((crc << 1) ^ poly);
+                    else
+                        crc =  static_cast<CrcDT>(crc << 1);
                 }
             }
 
-            crc = refOut ? reverse_bits<CrcDT>(crc) : crc;// 输出反转处理
-            return crc ^ xorOut;// 最终异或
+            // 输出反转处理
+            crc = refOut ? reverse_bits<CrcDT>(crc) : crc;
+
+            // 最终异或
+            crc = crc ^ xorOut;
+
+            //输入不反转而且crc位数不为8的整数倍的而左移过的结果需要将其右移回去
+            crc = refIn ? crc : (crc >> crcOffset);/**note**/
+            return crc;
         }
 
     public:
@@ -281,7 +274,7 @@ namespace FrameSerializer
         template <unsigned Bytes = 1,ByteMode mode = Big>
         static FunctionReturn<Bytes> crc5_usb(unsigned char* data,unsigned start,unsigned end,unsigned pos)
         {
-            DT<Bytes> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,false,false>(data,start,end);
+            DT<Bytes> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
         }
 
@@ -391,7 +384,7 @@ namespace FrameSerializer
         }
 
         template <unsigned Bytes = 4,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc_32(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc32(unsigned char* data,unsigned start,unsigned end,unsigned pos)
         {
             DT<Bytes> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
@@ -422,12 +415,30 @@ namespace FrameSerializer
     static void test(){
         auto d1 = FixedFrame<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
         unsigned char* data = d1.get();
-        Check::crc4_itu(data,0,7,7);
-        Check::crc5_epc(data,0,7,7);
-        Check::crc5_itu(data,0,7,7);
+
+        Check::crc4_itu(data,0,7,7);//0x05
+        Check::crc5_epc(data,0,7,7);//0x0f
+        Check::crc5_itu(data,0,7,7);//0x05
         Check::crc5_usb(data,0,7,7);
         Check::crc6_itu(data,0,7,7);
         Check::crc7_mmc(data,0,7,7);
+        Check::crc8(data,0,7,7);
+        Check::crc8_itu(data,0,7,7);
+        Check::crc8_rohc(data,0,7,7);
+        Check::crc8_maxim(data,0,7,7);
+        Check::crc16_dnp(data,0,7,7);
+        Check::crc16_ibm(data,0,7,7);
+        Check::crc16_usb(data,0,7,7);
+        Check::crc16_x25(data,0,7,7);
+        Check::crc16_ccitt(data,0,7,7);
+        Check::crc16_maxim(data,0,7,7);
+        Check::crc16_modbus(data,0,7,7);
+        Check::crc16_xmodem(data,0,7,7);
+        Check::crc16_ccitt_false(data,0,7,7);
+        Check::crc32(data,0,7,7);
+        Check::crc32_c(data,0,7,7);
+        Check::crc32_mpeg2(data,0,7,7);
+        Check::crc32_koopman(data,0,7,7);
     }
 
 }
