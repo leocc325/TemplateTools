@@ -5,6 +5,7 @@
 #include <utility>
 #include <memory>
 #include <vector>
+#include <bitset>
 
 #include <QDebug>
 namespace FrameSerializer
@@ -146,33 +147,27 @@ namespace FrameSerializer
     ///unused
     class VariableFrame
     {
-//        char* head();
-//        char* dataPack();
-//        char* tail();
+    public:
+        void setHead(unsigned char*);
 
-//            template<typename T,template<typename...Element> class Array,typename...Args>
-//            inline char* convertArgToString(const Array<T,Args...>& array)
-//            {
-//                char* data = new char
-//                for(T& item : array)
-//                {
+        template<typename T,template<typename...Element> class Array,typename...Args>
+        inline char* setDataPack(const Array<T,Args...>& array)
+        {
 
-//                }
+        }
 
-//            }
+        template<size_t N,typename T>
+        inline char* setDataPack(const T(&array)[N])
+        {
 
-//            template<size_t N,typename T>
-//            inline char* convertArgToString(const T(&array)[N])
-//            {
-//                QString str;
-//                for(T& item : array)
-//                {
+        }
 
-//                }
-//                return str;
-//            }
+        void setTail(unsigned char*);
 
-//            char*
+    private:
+            ///length三个值分别表示帧头长度、数据包长度、帧尾长度,长度单位为字节
+            unsigned length[3] = {0,0,0};
+            char* frame = nullptr;
     };
 
     class FrameCheck
