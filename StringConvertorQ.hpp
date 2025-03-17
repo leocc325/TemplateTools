@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include <bitset>
+#include <queue>
 
 #include <QDebug>
 namespace FrameSerializer
@@ -147,27 +148,113 @@ namespace FrameSerializer
     ///unused
     class VariableFrame
     {
+        enum Pos{Head,Pack,Tail};
     public:
-        void setHead(unsigned char*);
+        void setHead(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = length + partsLength[Pack] + partsLength[Tail];
+            unsigned char* newBuffer = new unsigned char[newSize];
 
-        template<typename T,template<typename...Element> class Array,typename...Args>
-        inline char* setDataPack(const Array<T,Args...>& array)
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,data,length);
+                memcpy(newBuffer+length,frame+partsLength[Head],partsLength[Pack]);
+                memcpy(newBuffer+length+partsLength[Pack],frame+partsLength[Head]+partsLength[Pack] ,partsLength[Tail]);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Tail] = length;
+        }
+
+        template<unsigned Byte,typename T,template<typename...Element> class Array,typename...Args>
+        inline void setDataPack(const Array<T,Args...>& array)
         {
 
         }
 
         template<size_t N,typename T>
-        inline char* setDataPack(const T(&array)[N])
+        inline void setDataPack(const T(&array)[N])
         {
 
         }
 
-        void setTail(unsigned char*);
+        template<typename T>
+        inline void setDataPack(const T* data,unsigned length)
+        {
+
+        }
+
+        void setTail(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
+            unsigned char* newBuffer = new unsigned char[newSize];
+
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,frame,partsLength[Head]);
+                memcpy(newBuffer+partsLength[Head],frame+partsLength[Head],partsLength[Pack]);
+                memcpy(newBuffer+partsLength[Head]+partsLength[Pack],data,length);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Tail] = length;
+        }
+
+        unsigned char* data() const{
+            return frame;
+        }
+
+        operator unsigned char*() const{
+            return frame;
+        }
 
     private:
-            ///length三个值分别表示帧头长度、数据包长度、帧尾长度,长度单位为字节
-            unsigned length[3] = {0,0,0};
-            char* frame = nullptr;
+        void setDataPack(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
+            unsigned char* newBuffer = new unsigned char[newSize];
+
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,  frame,  partsLength[Head]);
+                memcpy(newBuffer+partsLength[Head],  data,  length);
+                memcpy(newBuffer+partsLength[Head]+length,  frame+partsLength[Head]+length,  frame[Tail]);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Pack] = length;
+        }
+
+        void free()
+        {
+            if(frame != nullptr)
+            {
+                delete [] frame;
+                frame = nullptr;
+            }
+        }
+    private:
+        ///length三个值分别表示帧头长度、数据包长度、帧尾长度,长度单位为字节
+        std::size_t partsLength[3] = {0,0,0};
+        unsigned char* frame = nullptr;
     };
 
     class FrameCheck
@@ -256,7 +343,7 @@ namespace FrameSerializer
 
     public:
         ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
-        template <unsigned Bytes,ByteMode mode = Big>
+        template <unsigned Bytes = 1,ByteMode mode = Big>
         static FunctionReturn<Bytes> sum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
         {
             DT<Bytes>  sum = 0;
@@ -457,6 +544,9 @@ namespace FrameSerializer
         FrameCheck::crc32_c(data,0,7,7);
         FrameCheck::crc32_mpeg2(data,0,7,7);
         FrameCheck::crc32_koopman(data,0,7,7);
+
+        VariableFrame f;
+        FrameCheck::crc4_itu(f,0,7,7);
     }
 
 }
