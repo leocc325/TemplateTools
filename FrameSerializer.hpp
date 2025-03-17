@@ -5,6 +5,8 @@
 #include <utility>
 #include <memory>
 #include <vector>
+#include <bitset>
+#include <queue>
 
 #include <QDebug>
 namespace FrameSerializer
@@ -144,8 +146,116 @@ namespace FrameSerializer
     };
 
     ///unused
-    template<template<unsigned...N1> class F1,typename T,template<unsigned...N2> class F2>
-    class VariableFrame {};
+    class VariableFrame
+    {
+        enum Pos{Head,Pack,Tail};
+    public:
+        void setHead(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = length + partsLength[Pack] + partsLength[Tail];
+            unsigned char* newBuffer = new unsigned char[newSize];
+
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,data,length);
+                memcpy(newBuffer+length,frame+partsLength[Head],partsLength[Pack]);
+                memcpy(newBuffer+length+partsLength[Pack],frame+partsLength[Head]+partsLength[Pack] ,partsLength[Tail]);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Tail] = length;
+        }
+
+        template<unsigned Byte,typename T,template<typename...Element> class Array,typename...Args>
+        inline void setDataPack(const Array<T,Args...>& array)
+        {
+
+        }
+
+        template<size_t N,typename T>
+        inline void setDataPack(const T(&array)[N])
+        {
+
+        }
+
+        template<typename T>
+        inline void setDataPack(const T* data,unsigned length)
+        {
+
+        }
+
+        void setTail(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
+            unsigned char* newBuffer = new unsigned char[newSize];
+
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,frame,partsLength[Head]);
+                memcpy(newBuffer+partsLength[Head],frame+partsLength[Head],partsLength[Pack]);
+                memcpy(newBuffer+partsLength[Head]+partsLength[Pack],data,length);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Tail] = length;
+        }
+
+        unsigned char* data() const{
+            return frame;
+        }
+
+        operator unsigned char*() const{
+            return frame;
+        }
+
+    private:
+        void setDataPack(unsigned char* data,unsigned length)
+        {
+            std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
+            unsigned char* newBuffer = new unsigned char[newSize];
+
+            if(frame == nullptr)
+            {
+                memcpy(newBuffer,data,length);
+            }
+            else
+            {
+                memcpy(newBuffer,  frame,  partsLength[Head]);
+                memcpy(newBuffer+partsLength[Head],  data,  length);
+                memcpy(newBuffer+partsLength[Head]+length,  frame+partsLength[Head]+length,  frame[Tail]);
+
+                this->free();
+            }
+
+            frame = newBuffer;
+            partsLength[Pack] = length;
+        }
+
+        void free()
+        {
+            if(frame != nullptr)
+            {
+                delete [] frame;
+                frame = nullptr;
+            }
+        }
+    private:
+        ///length三个值分别表示帧头长度、数据包长度、帧尾长度,长度单位为字节
+        std::size_t partsLength[3] = {0,0,0};
+        unsigned char* frame = nullptr;
+    };
 
     class FrameCheck
     {
@@ -184,10 +294,8 @@ namespace FrameSerializer
          *refIn:输入是否反转,即每个字节是否需要按位反转后再处理。
          *refOut:输出是否反转,即最终的CRC值是否需要按位反转。
          *
-         * note:这个模板不是通过crc原理完成的,模板最初只完成了针对8位及8位以上的crc校验,后续为了将不足8位的crc校验也兼容进来
-         * 后续是参考https://github.com/whik/crc-lib-c 一边debug一边修改函的
-         * 所以我也不清楚有些地方为什么要那样写代码,代码中用note标记的地方就是我也不太清楚原理的部分
-         * but! 代码能正常工作!
+         * note:这个模板最初只完成了针对8位及8位以上的crc校验,后续为了将不足8位的crc校验也兼容进来,参考https://github.com/whik/crc-lib-c 一边debug一边修改的
+         * 所以我也不清楚有些地方为什么要那样写代码,代码中用note标记的地方就是我也没太想明白原理的部分, but! 代码能正常工作!
          */
         template<int crcbits,typename CrcDT,CrcDT polynomial,CrcDT init,CrcDT xorOut,bool refIn,bool refOut>
         static CrcDT crcImpl(unsigned char* data,unsigned start,unsigned end)
@@ -235,7 +343,7 @@ namespace FrameSerializer
 
     public:
         ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
-        template <unsigned Bytes,ByteMode mode = Big>
+        template <unsigned Bytes = 1,ByteMode mode = Big>
         static FunctionReturn<Bytes> sum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
         {
             DT<Bytes>  sum = 0;
@@ -436,6 +544,9 @@ namespace FrameSerializer
         FrameCheck::crc32_c(data,0,7,7);
         FrameCheck::crc32_mpeg2(data,0,7,7);
         FrameCheck::crc32_koopman(data,0,7,7);
+
+        VariableFrame f;
+        FrameCheck::crc4_itu(f,0,7,7);
     }
 
 }
