@@ -17,6 +17,7 @@ namespace FrameSerializer
             Little
         };
 
+        ///计算总的字节长度
         template<unsigned Byte,unsigned...RemainBytes>
         struct Length{
             static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
@@ -27,6 +28,8 @@ namespace FrameSerializer
             static constexpr unsigned value = Byte;
         };
 
+        ///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
+        ///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
         template<typename First,typename...Args>
         struct IsInteger{
             static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
@@ -43,6 +46,7 @@ namespace FrameSerializer
             static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
         };
 
+        ///传入的通信协议是否是每个数据占用一个字节
         template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
         struct OneBytePerArg{
             static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
@@ -51,10 +55,14 @@ namespace FrameSerializer
         ///当前允许的校验结果最大字节数
         static constexpr unsigned maxCheckSize = 8;
 
+        ///每一个字节的长度,固定为8位
+        static constexpr unsigned CharBit = 8;
+
         enum DataSize{oneByte,twoByte,fourByte,eightByte};
 
         static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
 
+        ///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
         template<unsigned Bytes>struct DataType{using type = void;};
 
         template<> struct DataType<oneByte>{using type = unsigned char;};
@@ -65,11 +73,13 @@ namespace FrameSerializer
 
         template<> struct DataType<eightByte>{using type = unsigned long long;};
 
-        template<unsigned Bytes>
-        using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),void>::type;
-
+        ///别名模板,简化DataType的代码长度
         template<unsigned Bytes>
         using DT =  typename DataType<ByteWidthArray[Bytes]>::type;
+
+        ///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量),超出8字节屏蔽模板
+        template<unsigned Bytes>
+        using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
     }
 
     template<unsigned...Bytes>
@@ -101,7 +111,7 @@ namespace FrameSerializer
             {
                 for(unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CHAR_BIT : (i *CHAR_BIT );
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CharBit : (i *CharBit );
                     data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
                 }
                 FixTrans<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
@@ -112,7 +122,7 @@ namespace FrameSerializer
             {
                 for(int unsigned i = 0; i < Byte; i++)
                 {
-                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CHAR_BIT : (i * CHAR_BIT );
+                    unsigned offset = (mode == Big) ? (Byte - i - 1) * CharBit : (i * CharBit );
                     data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
                 }
             }
@@ -172,10 +182,24 @@ namespace FrameSerializer
             partsLength[Tail] = length;
         }
 
-        template<unsigned Byte,typename T,template<typename...Element> class Array,typename...Args>
+        ///将传入的容器转换为对应的char数组,容器必须存在size函数可获取容器内元素数量
+        ///mode:数据大端表示还是小端表示,默认为大端
+        ///BytePerData:每一个数据在转换之后占用多少个字节
+        template<ByteMode mode = Big,unsigned BytePerData,typename T,template<typename...Element> class Array,typename...Args>
         inline void setDataPack(const Array<T,Args...>& array)
         {
+            std::size_t bufferSize = BytePerData * array.size();
+            unsigned char* data = new unsigned char[bufferSize];
+            for(const T& value : array)
+            {
+                for(unsigned i = 0; i < BytePerData; i++)
+                {
+                    unsigned offset = (mode == Big) ? (BytePerData - i - 1) * CharBit : (i *CharBit );
+                    data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
+                }
+            }
 
+            setDataPackImpl(data,bufferSize);
         }
 
         template<size_t N,typename T>
@@ -184,13 +208,14 @@ namespace FrameSerializer
 
         }
 
+        ///将指针数组转换为char数组
         template<typename T>
-        inline void setDataPack(const T* data,unsigned length)
+        inline void setDataPack(const T* data,std::size_t length)
         {
 
         }
 
-        void setTail(unsigned char* data,unsigned length)
+        void setTail(unsigned char* data,std::size_t length)
         {
             std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
             unsigned char* newBuffer = new unsigned char[newSize];
@@ -221,7 +246,7 @@ namespace FrameSerializer
         }
 
     private:
-        void setDataPack(unsigned char* data,unsigned length)
+        void setDataPackImpl(unsigned char* data,std::size_t length)
         {
             std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
             unsigned char* newBuffer = new unsigned char[newSize];
@@ -263,7 +288,7 @@ namespace FrameSerializer
         template<typename T>
         static T reverse_bits(T value)
         {
-            const size_t bits = sizeof(T) * CHAR_BIT;
+            const size_t bits = sizeof(T) * CharBit;
             T reversed = 0;
             for (size_t i = 0; i < bits; ++i)
             {
@@ -273,11 +298,14 @@ namespace FrameSerializer
         }
 
         template<unsigned Bytes>
-        static void writeCheckValue(ByteMode mode,unsigned char* data,DT<Bytes> check,unsigned pos)
+        static void writeCheckValue(ByteMode mode,unsigned char* data,DT<Bytes> check,int pos)
         {
+            if(pos < 0)
+                return ;
+
             for(unsigned index = 0; index < Bytes; index++)
             {
-                unsigned char value = static_cast<unsigned char>(check >> (CHAR_BIT * index)) & 0xFF;
+                unsigned char value = static_cast<unsigned char>(check >> (CharBit * index)) & 0xFF;
                 if(mode == Big)
                      data[pos+Bytes-index-1] = value;
                 else
@@ -303,13 +331,13 @@ namespace FrameSerializer
             CrcDT crc =  init;
             CrcDT poly = polynomial;
 
-            constexpr unsigned crcSize = sizeof (CrcDT) * CHAR_BIT;//crc变量总位数
+            constexpr unsigned crcSize = sizeof (CrcDT) * CharBit;//crc变量总位数
             constexpr CrcDT topbit = static_cast<CrcDT>(1) << (crcSize - 1); //crc最高位为1时的值
 
             //如果crc位数不是8的整倍数,需要将crc右端补0
-            constexpr int crcOffset = (crcbits % CHAR_BIT) ?  CHAR_BIT - (crcbits % CHAR_BIT) : 0;
+            constexpr int crcOffset = (crcbits % CharBit) ?  CharBit - (crcbits % CharBit) : 0;
             //对输入数据每一个字节右端补0
-            constexpr int byteOffset = crcSize - CHAR_BIT;
+            constexpr int byteOffset = crcSize - CharBit;
 
             //如果crc位宽不是8的整倍数,需要对多项式和crc初始值左移crcOffset位
             poly =  static_cast<CrcDT>(poly << crcOffset);/**note**/
@@ -321,7 +349,7 @@ namespace FrameSerializer
                 unsigned char byte = refIn ? reverse_bits<unsigned char>(data[i]) : data[i];// 输入反转处理
                 crc  = static_cast<CrcDT>( crc ^ (static_cast<CrcDT>(byte) << byteOffset) );// 将当前字节反转之后再进行左移和CRC对齐(相当于右端补零),随后与crc异或
 
-                for (int j = 0; j < CHAR_BIT; ++j)
+                for (unsigned j = 0; j < CharBit; ++j)
                 {
                     if(crc & topbit)
                         crc =  static_cast<CrcDT>((crc << 1) ^ poly);
@@ -336,15 +364,16 @@ namespace FrameSerializer
             // 最终异或
             crc = crc ^ xorOut;
 
-            //输入不反转而且crc位数不为8的整数倍的而左移过的结果需要将其右移回去
+            //输入不反转而且crc位数不为8的整数倍的而且左移过的结果需要将其右移回去
             crc = refIn ? crc : (crc >> crcOffset);/**note**/
             return crc;
         }
 
     public:
         ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+        ///当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> sum(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> sum(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes>  sum = 0;
             for(; start <= end; ++start){
@@ -352,168 +381,193 @@ namespace FrameSerializer
             }
 
             writeCheckValue<Bytes>(mode,data,sum,pos);
+            return sum;
         }
 
         /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+        /// 当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc4_itu(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc4_itu(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<4,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc5_epc(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc5_epc(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<5,unsigned char,0x09,0x09,0x00,false,false>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc5_itu(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc5_itu(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<5,unsigned char,0x15,0x00,0x00,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc5_usb(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc5_usb(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc6_itu(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc6_itu(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<6,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc7_mmc(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc7_mmc(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<7,unsigned char,0x09,0x00,0x00,false,false>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc8(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc8(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0x00,0x00,false,false>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc8_itu(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc8_itu(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0x00,0x55,false,false>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc8_rohc(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc8_rohc(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0xFF,0x00,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 1,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc8_maxim(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc8_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<8,unsigned char,0x31,0x00,0x00,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_ibm(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_ibm(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0x000,0x000,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_maxim(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0x0000,0xFFFF,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_usb(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_usb(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0xFFFF,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_modbus(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_modbus(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0x0000,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_ccitt(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_ccitt(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_ccitt_false(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_ccitt_false(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0x0000,false,false>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_x25(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_x25(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0xFFFF,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_xmodem(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_xmodem(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,false,false>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 2,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc16_dnp(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc16_dnp(unsigned char* data,unsigned start,unsigned end,int pos)
         {
            DT<Bytes> crc =  crcImpl<16,unsigned short,0x3d65,0x0000,0xFFFF,true,true>(data,start,end);
            writeCheckValue<Bytes>(mode,data,crc,pos);
+           return crc;
         }
 
         template <unsigned Bytes = 4,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc32(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc32(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 4,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc32_c(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc32_c(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<32,unsigned int,0x01EDC6F41,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 4,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc32_koopman(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc32_koopman(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<32,unsigned int,0x741B8CD7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
 
         template <unsigned Bytes = 4,ByteMode mode = Big>
-        static FunctionReturn<Bytes> crc32_mpeg2(unsigned char* data,unsigned start,unsigned end,unsigned pos)
+        static FunctionReturn<Bytes> crc32_mpeg2(unsigned char* data,unsigned start,unsigned end,int pos)
         {
             DT<Bytes> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0x00000000,false,false>(data,start,end);
             writeCheckValue<Bytes>(mode,data,crc,pos);
+            return crc;
         }
     };
 
