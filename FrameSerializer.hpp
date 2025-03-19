@@ -12,78 +12,142 @@
 namespace FrameSerializer
 {
 namespace  {
-enum ByteMode {
-    Big,
-    Little
-};
+    enum ByteMode {
+        Big,
+        Little
+    };
 
-///计算总的字节长度
-template<unsigned Byte,unsigned...RemainBytes>
-struct Length{
-    static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
-};
+    ///计算总的字节长度
+    template<unsigned Byte,unsigned...RemainBytes>
+    struct Length{
+        static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
+    };
 
-template<unsigned Byte>
-struct Length<Byte>{
-    static constexpr unsigned value = Byte;
-};
+    template<unsigned Byte>
+    struct Length<Byte>{
+        static constexpr unsigned value = Byte;
+    };
 
-///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
-///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
-template<typename First,typename...Args>
-struct IsInteger{
-    static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
-};
+    ///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
+    ///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
+    template<typename First,typename...Args>
+    struct IsInteger{
+        static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
+    };
 
-template<typename First>
-struct IsInteger<First>{
-    static constexpr bool value = std::is_integral<First>::value;
-};
+    template<typename First>
+    struct IsInteger<First>{
+        static constexpr bool value = std::is_integral<First>::value;
+    };
 
-///验证类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
-template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
-struct Matchable{
-    static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
-};
+    ///验证类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
+    template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
+    struct Matchable{
+        static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
+    };
 
-///传入的通信协议是否是每个数据占用一个字节
-template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
-struct OneBytePerArg{
-    static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
-};
+    ///传入的通信协议是否是每个数据占用一个字节
+    template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
+    struct OneBytePerArg{
+        static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
+    };
 
-///当前允许的校验结果最大字节数
-static constexpr unsigned maxCheckSize = 8;
+    ///当前允许的校验结果最大字节数
+    static constexpr unsigned maxCheckSize = 8;
 
-///每一个字节的长度,固定为8位
-static constexpr unsigned CharBit = 8;
+    ///每一个字节的长度,固定为8位
+    static constexpr unsigned CharBit = 8;
 
-enum DataSize{oneByte,twoByte,fourByte,eightByte};
+    enum DataSize{oneByte,twoByte,fourByte,eightByte};
 
-static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
+    static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
 
-///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
-template<unsigned Bytes>struct DataType{using type = void;};
+    ///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
+    template<unsigned Bytes>struct DataType{using type = void;};
 
-template<> struct DataType<oneByte>{using type = unsigned char;};
+    template<> struct DataType<oneByte>{using type = unsigned char;};
 
-template<> struct DataType<twoByte>{using type = unsigned short;};
+    template<> struct DataType<twoByte>{using type = unsigned short;};
 
-template<> struct DataType<fourByte>{using type = unsigned int;};
+    template<> struct DataType<fourByte>{using type = unsigned int;};
 
-template<> struct DataType<eightByte>{using type = unsigned long long;};
+    template<> struct DataType<eightByte>{using type = unsigned long long;};
 
-///别名模板,简化DataType的代码长度
-template<unsigned Bytes>
-using DT =  typename DataType<ByteWidthArray[Bytes]>::type;
+    ///别名模板,简化DataType的代码长度
+    template<unsigned Bytes>
+    using DT =  typename DataType<ByteWidthArray[Bytes]>::type;
 
-///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量),超出8字节屏蔽模板
-template<unsigned Bytes>
-using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
+    ///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量),超出8字节屏蔽模板
+    template<unsigned Bytes>
+    using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
 }
 
-template<unsigned...Bytes>
-class FixedFrame
+template<unsigned BytePerArg>
+class CharConverter{
+
+    ///将传入的容器转换为对应的char数组,容器必须存在size函数可获取容器内元素数量
+    ///mode:数据大端表示还是小端表示,默认为大端
+    ///BytePerData:每一个数据在转换之后占用多少个字节
+    template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
+    static std::unique_ptr<unsigned char[]> setDataPack(const Array<T,Args...>& array)
+    {
+        std::size_t bufferSize = BytePerArg * array.size();
+        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+
+        unsigned argIndex = 0;
+        for(const T& value : array)
+        {
+            for(unsigned i = 0; i < BytePerArg; i++)
+            {
+                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
+                data[argIndex*BytePerArg+i] = static_cast<unsigned char>(value >> offset) & 0xFF ;
+            }
+            ++argIndex;
+        }
+
+        return data;
+    }
+
+    template<ByteMode mode = Big,size_t N,typename T>
+    static std::unique_ptr<unsigned char[]> setDataPack(const T(&array)[N])
+    {
+        std::size_t bufferSize = BytePerArg * N;
+        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+
+        for(int i = 0; i < N; i++)
+        {
+            for(unsigned i = 0; i < BytePerArg; i++)
+            {
+                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
+                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
+            }
+        }
+
+        return data;
+    }
+
+    ///将指针数组转换为char数组
+    template<ByteMode mode = Big,typename T>
+    static std::unique_ptr<unsigned char[]> setDataPack(const T* array,std::size_t length)
+    {
+        std::size_t bufferSize = BytePerArg * length;
+        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+
+        for(unsigned i = 0; i < length; i++)
+        {
+            for(unsigned i = 0; i < BytePerArg; i++)
+            {
+                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
+                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
+            }
+        }
+
+        return data;
+    }
+};
+
+template<unsigned...BytePerArg>
+class FrameFix
 {
 private:
     ///情况1:数据帧长度固定为N,每一个数据占用1字节的长度时调用此递归模板
@@ -131,167 +195,56 @@ private:
 public:
     ///总长度固定,单个数据长度可变的转换
     template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+    static typename std::enable_if<!OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
     trans(Args...args)
     {
-        static_assert (Matchable<sizeof... (Bytes),sizeof... (Args),Args...>::value,"error");
+        static_assert (Matchable<sizeof... (BytePerArg),sizeof... (Args),Args...>::value,"error");
 
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
-        FixTrans<Bytes...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
+        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<BytePerArg...>::value]);
+        FixTrans<BytePerArg...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
         return data;
     }
 
     ///总长度固定,单个数据长度1字节的转换
     template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg<sizeof... (Bytes),Length<Bytes...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+    static typename std::enable_if<OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
     trans(Args...args)
     {
-        static_assert (sizeof... (Args) == Length<Bytes...>::value,"error");
+        static_assert (sizeof... (Args) == Length<BytePerArg...>::value,"error");
 
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<Bytes...>::value]);
-        FixTransSingle<Bytes...>::transImpl(data.get(),0,std::forward<Args>(args)...);
-        return data;
-    }
-
-};
-
-template<unsigned BytePerArg>
-class Transer{
-
-    ///将传入的容器转换为对应的char数组,容器必须存在size函数可获取容器内元素数量
-    ///mode:数据大端表示还是小端表示,默认为大端
-    ///BytePerData:每一个数据在转换之后占用多少个字节
-    template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
-    inline std::unique_ptr<unsigned char[]> setDataPack(const Array<T,Args...>& array)
-    {
-        std::size_t bufferSize = BytePerArg * array.size();
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
-
-        unsigned argIndex = 0;
-        for(const T& value : array)
-        {
-            for(unsigned i = 0; i < BytePerArg; i++)
-            {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[argIndex*BytePerArg+i] = static_cast<unsigned char>(value >> offset) & 0xFF ;
-            }
-            ++argIndex;
-        }
-
-        return data;
-    }
-
-    template<ByteMode mode = Big,size_t N,typename T>
-    inline std::unique_ptr<unsigned char[]> setDataPack(const T(&array)[N])
-    {
-        std::size_t bufferSize = BytePerArg * N;
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
-
-        for(int i = 0; i < N; i++)
-        {
-            for(unsigned i = 0; i < BytePerArg; i++)
-            {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
-            }
-        }
-
-        return data;
-    }
-
-    ///将指针数组转换为char数组
-    template<ByteMode mode = Big,typename T>
-    inline std::unique_ptr<unsigned char[]> setDataPack(const T* array,std::size_t length)
-    {
-        std::size_t bufferSize = BytePerArg * length;
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
-
-        for(unsigned i = 0; i < length; i++)
-        {
-            for(unsigned i = 0; i < BytePerArg; i++)
-            {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
-            }
-        }
-
+        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<BytePerArg...>::value]);
+        FixTransSingle<BytePerArg...>::transImpl(data.get(),0,std::forward<Args>(args)...);
         return data;
     }
 };
 
-///unused
-class VariableFrame
+class FrameVar
 {
-    enum Pos{Head,Pack,Tail};
 public:
-    void setHead(unsigned char* data,unsigned length)
-    {
-        std::size_t newSize = length + partsLength[Pack] + partsLength[Tail];
-        unsigned char* newBuffer = new unsigned char[newSize];
-
-        if(frame == nullptr)
-        {
-            memcpy(newBuffer,data,length);
-        }
-        else
-        {
-            memcpy(newBuffer,data,length);
-            memcpy(newBuffer+length,frame+partsLength[Head],partsLength[Pack]);
-            memcpy(newBuffer+length+partsLength[Pack],frame+partsLength[Head]+partsLength[Pack] ,partsLength[Tail]);
-
-            this->free();
-        }
-
-        frame = newBuffer;
-        partsLength[Tail] = length;
+    FrameVar(){}
+    ~FrameVar(){
+        free();
     }
-
-    void setDataPack(unsigned char* data,std::size_t length)
+    ///将帧头、数据包、帧尾组合成一个完整的帧
+    ///HeadSize:帧头长度、DataSize:数据部分大小、TailSize:帧尾大小。单位全部为字节。
+    void combineFrame(const unsigned char* head,unsigned HeadSize,
+                   const unsigned char* data,unsigned DataSize,
+                   const unsigned char* tail,unsigned TailSize)
     {
-        std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
-        unsigned char* newBuffer = new unsigned char[newSize];
+        free();
 
-        if(frame == nullptr)
-        {
-            memcpy(newBuffer,data,length);
-        }
-        else
-        {
-            memcpy(newBuffer,  frame,  partsLength[Head]);
-            memcpy(newBuffer+partsLength[Head],  data,  length);
-            memcpy(newBuffer+partsLength[Head]+length,  frame+partsLength[Head]+length,  frame[Tail]);
-
-            this->free();
-        }
-
-        frame = newBuffer;
-        partsLength[Pack] = length;
-    }
-
-    void setTail(unsigned char* data,std::size_t length)
-    {
-        std::size_t newSize = partsLength[Head] + partsLength[Pack] + length;
-        unsigned char* newBuffer = new unsigned char[newSize];
-
-        if(frame == nullptr)
-        {
-            memcpy(newBuffer,data,length);
-        }
-        else
-        {
-            memcpy(newBuffer,frame,partsLength[Head]);
-            memcpy(newBuffer+partsLength[Head],frame+partsLength[Head],partsLength[Pack]);
-            memcpy(newBuffer+partsLength[Head]+partsLength[Pack],data,length);
-
-            this->free();
-        }
-
-        frame = newBuffer;
-        partsLength[Tail] = length;
+        frame = new unsigned char[HeadSize+DataSize+TailSize];
+        memcpy(frame,head,HeadSize);
+        memcpy(frame+HeadSize,data,DataSize);
+        memcpy(frame+HeadSize+DataSize,tail,TailSize);
     }
 
     unsigned char* data() const{
         return frame;
+    }
+
+    operator char*() const {
+        return  reinterpret_cast<char*>(frame);
     }
 
     operator unsigned char*() const{
@@ -308,8 +261,6 @@ private:
         }
     }
 private:
-    ///length三个值分别表示帧头长度、数据包长度、帧尾长度,长度单位为字节
-    std::size_t partsLength[3] = {0,0,0};
     unsigned char* frame = nullptr;
 };
 
@@ -328,17 +279,17 @@ class FrameCheck
         return reversed;
     }
 
-    template<unsigned Bytes>
-    static void writeCheckValue(ByteMode mode,unsigned char* data,DT<Bytes> check,int pos)
+    template<unsigned BytePerArg>
+    static void writeCheckValue(ByteMode mode,unsigned char* data,DT<BytePerArg> check,int pos)
     {
         if(pos < 0)
             return ;
 
-        for(unsigned index = 0; index < Bytes; index++)
+        for(unsigned index = 0; index < BytePerArg; index++)
         {
             unsigned char value = static_cast<unsigned char>(check >> (CharBit * index)) & 0xFF;
             if(mode == Big)
-                data[pos+Bytes-index-1] = value;
+                data[pos+BytePerArg-index-1] = value;
             else
                 data[pos+index] = value;
         }
@@ -355,7 +306,7 @@ class FrameCheck
          *
          * note:这个模板最初只完成了针对8位及8位以上的crc校验,后续为了将不足8位的crc校验也兼容进来,参考https://github.com/whik/crc-lib-c 一边debug一边修改的
          * 所以我也不清楚有些地方为什么要那样写代码,代码中用note标记的地方就是我也没太想明白原理的部分, but! 代码能正常工作!
-         */
+    */
     template<int crcbits,typename CrcDT,CrcDT polynomial,CrcDT init,CrcDT xorOut,bool refIn,bool refOut>
     static CrcDT crcImpl(unsigned char* data,unsigned start,unsigned end)
     {
@@ -401,209 +352,209 @@ class FrameCheck
     }
 
 public:
-    ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+    ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用ResultByte字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
     ///当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> sum(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> sum(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes>  sum = 0;
+        DT<ResultByte>  sum = 0;
         for(; start <= end; ++start){
             sum += data[start];
         }
 
-        writeCheckValue<Bytes>(mode,data,sum,pos);
+        writeCheckValue<ResultByte>(mode,data,sum,pos);
         return sum;
     }
 
-    /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用Bytes字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
+    /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用ResultByte字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
     /// 当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc4_itu(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc4_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<4,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<4,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc5_epc(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc5_epc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<5,unsigned char,0x09,0x09,0x00,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<5,unsigned char,0x09,0x09,0x00,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc5_itu(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc5_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<5,unsigned char,0x15,0x00,0x00,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<5,unsigned char,0x15,0x00,0x00,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc5_usb(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc5_usb(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc6_itu(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc6_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<6,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<6,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc7_mmc(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc7_mmc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<7,unsigned char,0x09,0x00,0x00,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<7,unsigned char,0x09,0x00,0x00,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc8(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc8(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0x00,0x00,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0x00,0x00,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc8_itu(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc8_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0x00,0x55,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0x00,0x55,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc8_rohc(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc8_rohc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<8,unsigned char,0x07,0xFF,0x00,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0xFF,0x00,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 1,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc8_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 1,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc8_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<8,unsigned char,0x31,0x00,0x00,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<8,unsigned char,0x31,0x00,0x00,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_ibm(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_ibm(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0x000,0x000,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0x000,0x000,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0x0000,0xFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0x0000,0xFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_usb(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_usb(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0xFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0xFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_modbus(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_modbus(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0x0000,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0x0000,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_ccitt(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_ccitt(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_ccitt_false(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_ccitt_false(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0x0000,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0x0000,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_x25(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_x25(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0xFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0xFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_xmodem(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_xmodem(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 2,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc16_dnp(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 2,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc16_dnp(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<16,unsigned short,0x3d65,0x0000,0xFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<16,unsigned short,0x3d65,0x0000,0xFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 4,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc32(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 4,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc32(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 4,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc32_c(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 4,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc32_c(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<32,unsigned int,0x01EDC6F41,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<32,unsigned int,0x01EDC6F41,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 4,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc32_koopman(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 4,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc32_koopman(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<32,unsigned int,0x741B8CD7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<32,unsigned int,0x741B8CD7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 
-    template <unsigned Bytes = 4,ByteMode mode = Big>
-    static FunctionReturn<Bytes> crc32_mpeg2(unsigned char* data,unsigned start,unsigned end,int pos)
+    template <unsigned ResultByte = 4,ByteMode mode = Big>
+    static FunctionReturn<ResultByte> crc32_mpeg2(unsigned char* data,unsigned start,unsigned end,int pos)
     {
-        DT<Bytes> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0x00000000,false,false>(data,start,end);
-        writeCheckValue<Bytes>(mode,data,crc,pos);
+        DT<ResultByte> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0x00000000,false,false>(data,start,end);
+        writeCheckValue<ResultByte>(mode,data,crc,pos);
         return crc;
     }
 };
 
 static void test(){
-    auto d1 = FixedFrame<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
+    auto d1 = FrameFix<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
     unsigned char* data = d1.get();
 
     FrameCheck::crc4_itu(data,0,7,7);//0x05
@@ -629,9 +580,6 @@ static void test(){
     FrameCheck::crc32_c(data,0,7,7);
     FrameCheck::crc32_mpeg2(data,0,7,7);
     FrameCheck::crc32_koopman(data,0,7,7);
-
-    VariableFrame f;
-    FrameCheck::crc4_itu(f,0,7,7);
 }
 
 }
