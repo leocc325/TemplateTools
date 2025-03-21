@@ -7,8 +7,8 @@
 #include <vector>
 #include <bitset>
 #include <queue>
+#include <string.h>
 
-#include <QDebug>
 namespace FrameSerializer
 {
 namespace  {
@@ -82,6 +82,159 @@ namespace  {
     using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
 }
 
+///数据帧
+class Frame
+{
+    ///判断是否所有的参数都是Frame类型
+    template<typename T,typename...Args>
+    struct IsFrame{
+        static constexpr bool value = std::is_same<T,Frame>::value && IsFrame<Args...>::value;
+    };
+
+    template<typename T>
+    struct IsFrame<T>{
+        static constexpr bool value = std::is_same<T,Frame>::value;
+    };
+
+    ///将所有的Frame放入一个容器,用于组合
+    template<typename T,typename...Args>
+    static unsigned long long frameVector(std::vector<Frame*>& vec,T& f,Args&...args)
+    {
+        unsigned long long size = f.size();
+        vec.push_back(f);
+        size += frameVector(vec,args...);
+        return size;
+    }
+
+    template<typename T>
+    static unsigned long long frameVector(std::vector<Frame*>& vec,T& f)
+    {
+        vec.push_back(f);
+        return f.size();
+    }
+
+public:
+    Frame(){}
+
+    Frame(unsigned long long size)
+    {
+        m_Data = new unsigned char[size];
+        this->m_Size = size;
+    }
+
+    Frame(unsigned char* buf,unsigned long long size)
+    {
+        m_Data = new unsigned char[size];
+        memcpy(m_Data,buf,size);
+        this->m_Size = size;
+    }
+
+    Frame(char* data,unsigned long long size)
+    {
+        m_Data = new unsigned char[size];
+        memcpy(m_Data,data,size);
+        this->m_Size = size;
+    }
+
+    ~Frame()
+    {
+        if(m_Data != nullptr)
+        {
+            delete [] m_Data;
+            m_Data = nullptr;
+        }
+    }
+
+    Frame(Frame&& other)
+    {
+        this->moveFrame(std::move(other));
+    }
+
+    Frame& operator = (Frame&& other)
+    {
+        this->moveFrame(std::move(other));
+        return *this;
+    }
+
+    Frame(const Frame&) = delete;
+
+    Frame& operator = (const Frame&) = delete ;
+
+    unsigned char& operator [] (unsigned long long index) const
+    {
+        return m_Data[index];
+    }
+
+    operator unsigned char* () const noexcept
+    {
+        return m_Data;
+    }
+
+    operator void* () const noexcept
+    {
+        return m_Data;
+    }
+
+    operator char* () const noexcept
+    {
+        return reinterpret_cast<char*>(m_Data);
+    }
+
+    unsigned char* data() const noexcept
+    {
+        return this->m_Data;
+    }
+
+    unsigned long long size() const noexcept
+    {
+        return m_Size;
+    }
+
+    ///将帧头、数据包、帧尾组合成一个完整的帧
+    ///HeadSize:帧头长度、DataSize:数据部分大小、TailSize:帧尾大小。单位全部为字节。
+    static Frame combineFrame(const unsigned char* head,unsigned HeadSize,
+                              const unsigned char* data,unsigned DataSize,
+                              const unsigned char* tail,unsigned TailSize)
+    {
+        Frame frame(HeadSize+DataSize+TailSize);
+        memcpy(frame.data(),head,HeadSize);
+        memcpy(frame.data()+HeadSize,data,DataSize);
+        memcpy(frame.data()+HeadSize+DataSize,tail,TailSize);
+        return frame;
+    }
+
+    template<typename...T>
+    static typename std::enable_if< IsFrame<std::decay_t<T>...>::value,Frame>::type
+    combine(T&&...frames)
+    {
+        std::vector<Frame*> vec;
+        unsigned long long totalSize = generate(vec,frames...);
+
+        Frame frame(totalSize);
+        unsigned long long index = 0;
+        for(Frame* f : vec)
+        {
+            memcpy(frame.data() + index,f,f->size());
+            index += f->size();
+        }
+
+        return frame;
+    }
+
+private:
+    void moveFrame(Frame&& other)
+    {
+        this->m_Data = other.m_Data;
+        this->m_Size = other.m_Size;
+        other.m_Data = nullptr;
+        other.m_Size = 0;
+    }
+
+private:
+    unsigned char* m_Data = nullptr;
+    unsigned long long m_Size = 0;
+};
+
 template<unsigned BytePerArg>
 class CharConverter{
 
@@ -89,10 +242,10 @@ class CharConverter{
     ///mode:数据大端表示还是小端表示,默认为大端
     ///BytePerData:每一个数据在转换之后占用多少个字节
     template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
-    static std::unique_ptr<unsigned char[]> setDataPack(const Array<T,Args...>& array)
+    static Frame setDataPack(const Array<T,Args...>& array)
     {
         std::size_t bufferSize = BytePerArg * array.size();
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+        Frame data(bufferSize);
 
         unsigned argIndex = 0;
         for(const T& value : array)
@@ -109,10 +262,10 @@ class CharConverter{
     }
 
     template<ByteMode mode = Big,size_t N,typename T>
-    static std::unique_ptr<unsigned char[]> setDataPack(const T(&array)[N])
+    static Frame setDataPack(const T(&array)[N])
     {
         std::size_t bufferSize = BytePerArg * N;
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+        Frame data(bufferSize);
 
         for(int i = 0; i < N; i++)
         {
@@ -128,10 +281,10 @@ class CharConverter{
 
     ///将指针数组转换为char数组
     template<ByteMode mode = Big,typename T>
-    static std::unique_ptr<unsigned char[]> setDataPack(const T* array,std::size_t length)
+    static Frame setDataPack(const T* array,std::size_t length)
     {
         std::size_t bufferSize = BytePerArg * length;
-        std::unique_ptr<unsigned char[]> data(new unsigned char[bufferSize]);
+        Frame data(bufferSize);
 
         for(unsigned i = 0; i < length; i++)
         {
@@ -195,73 +348,27 @@ private:
 public:
     ///总长度固定,单个数据长度可变的转换
     template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+    static typename std::enable_if<!OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,Frame>::type
     trans(Args...args)
     {
         static_assert (Matchable<sizeof... (BytePerArg),sizeof... (Args),Args...>::value,"error");
 
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<BytePerArg...>::value]);
-        FixTrans<BytePerArg...>::transImpl(Mode,data.get(),0,std::forward<Args>(args)...);
+        Frame data(Length<BytePerArg...>::value);
+        FixTrans<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
         return data;
     }
 
     ///总长度固定,单个数据长度1字节的转换
     template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,std::unique_ptr<unsigned char[]>>::type
+    static typename std::enable_if<OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,Frame>::type
     trans(Args...args)
     {
         static_assert (sizeof... (Args) == Length<BytePerArg...>::value,"error");
 
-        std::unique_ptr<unsigned char[]> data(new unsigned char[Length<BytePerArg...>::value]);
-        FixTransSingle<BytePerArg...>::transImpl(data.get(),0,std::forward<Args>(args)...);
+        Frame data(Length<BytePerArg...>::value);
+        FixTransSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
         return data;
     }
-};
-
-class FrameVar
-{
-public:
-    FrameVar(){}
-    ~FrameVar(){
-        free();
-    }
-    ///将帧头、数据包、帧尾组合成一个完整的帧
-    ///HeadSize:帧头长度、DataSize:数据部分大小、TailSize:帧尾大小。单位全部为字节。
-    void combineFrame(const unsigned char* head,unsigned HeadSize,
-                   const unsigned char* data,unsigned DataSize,
-                   const unsigned char* tail,unsigned TailSize)
-    {
-        free();
-
-        frame = new unsigned char[HeadSize+DataSize+TailSize];
-        memcpy(frame,head,HeadSize);
-        memcpy(frame+HeadSize,data,DataSize);
-        memcpy(frame+HeadSize+DataSize,tail,TailSize);
-    }
-
-    unsigned char* data() const{
-        return frame;
-    }
-
-    operator char*() const {
-        return  reinterpret_cast<char*>(frame);
-    }
-
-    operator unsigned char*() const{
-        return frame;
-    }
-
-private:
-    void free()
-    {
-        if(frame != nullptr)
-        {
-            delete [] frame;
-            frame = nullptr;
-        }
-    }
-private:
-    unsigned char* frame = nullptr;
 };
 
 class FrameCheck
@@ -554,8 +661,7 @@ public:
 };
 
 static void test(){
-    auto d1 = FrameFix<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
-    unsigned char* data = d1.get();
+    Frame data = FrameFix<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
 
     FrameCheck::crc4_itu(data,0,7,7);//0x05
     FrameCheck::crc5_epc(data,0,7,7);//0x0f
