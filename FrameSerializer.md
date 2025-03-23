@@ -152,14 +152,39 @@ Frame frameIbig = Trans<5>::byProtocol<Big>(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 ```
 
-#### 如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是不确定的,此时无法再通过byProtocol生成数据帧,也是不现实的
-#### <ins>因为通信协议太长会导致模板在展开时代码膨胀,这会严重影响代码的编译效率,同时使编译后的文件体积急剧增加,所以在确定数据帧的时候请根据系统性能和需求确定是否需要通过byProtocol生成一个数据帧</ins>
-#### 为了应对这种情况,我们可以将这种长度不定用于传输数据的帧拆分为三个部分: <ins>帧头段、数据段、帧尾段</ins>。
-#### <ins>帧头段、帧尾段</ins>一定是可以根据通信协议确定的固定长度帧,这两部分数据可以通过byProtocol生成
-#### <ins>数据段</ins>则通过下方将要介绍函数生成,***由于数据段中每一个数据所占长度通常都是固定的,所以这一部分xxxxxxxxxx***。
+***如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。<br />
+但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是变化的,此时无法再通过指定通信协议然后调用byProtocol生成数据帧,也是不现实的。<br />
+ <ins>通信协议太长会导致模板在展开时代码膨胀,这会严重影响代码的编译效率,同时使编译后的文件体积急剧增加,所以在协议太长的情况下确定数据帧的时候请根据系统性能和需求确定是否需要通过byProtocol生成一个数据帧</ins>。 <br />
+ 为了应对这种情况,我们可以将这种长度不定的帧拆分为三个部分: <ins>帧头段、数据段、帧尾段</ins>。<br />
+ <ins>帧头段、帧尾段</ins>一定是可以根据通信协议确定的固定长度帧,这两部分数据可以通过byProtocol生成。 <br />
+ <ins>数据段</ins>则通过fromArray函数生成,由于数据段中每一个数据所占长度通常都是固定的,所以在调用fromArray时只需要在类模板的模板参数中传入一个unsigned参数即可，具体使用方法参见每一个fromArray函数说明*** <br />
 
-#### 2.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的数据并组成一个unsigned char数组。
-这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,而且转换之后每个数据所占长度只能是固定值。
+#### 2.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的unsigned char数组。
+这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,建议传入的容器为顺序容器。使用方法如下:
+```c++
+std::vector<int> vec = {10,11,12,13};
+Frame frameJ = Trans<4>::fromArray(vec);//将vec中的每一个数据都转换为占用4字节长度unsigned char数组
+Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组
+```
+frameJ中的内容为:<ins>0x00 0x00 0x00 0x0A</ins>  <ins>0x00 0x00 0x00 0x0B</ins>   <ins>0x00 0x00 0x00 0x0C</ins>   <ins>0x00 0x00 0x00 0x0D</ins> <br />
+frameK中的内容为:<ins>0x00 0x00 0x0A</ins>  <ins>0x00 0x00 0x0B</ins>   <ins>0x00 0x00 0x0C</ins>   <ins>0x00 0x00 0x0D</ins> <br />
+同样的,***fromArray生成的数据帧默认是大端保存的***,如果需要生成小端保存的帧,也只需要在调用fromArray的时候指定大小端类型即可: <br />
+```c++
+std::vector<int> vec = {10,11,12,13};
+Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组,大端保存
+Frame frameK_L = Trans<3>::fromArray<Little>(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组,小段保存
+```
+frameK_L中的内容为:<ins>0x0A 0x00 0x00</ins>  <ins>0x0B 0x00 0x00</ins>   <ins>0x0C 0x00 0x00</ins>   <ins>0x0D 0x00 0x00</ins> <br />
+
+***需要注意的是,在指定模板Trans<N>字节长度时,最好保证字节长度大于等于容器中的元素类型的字节大小,否则会导致数据被截断,保存的值无法再转换为原来的值。<br />***
+例如将std::vector<int>中的数据转换为2字节大小的unsigned char数组,会出现以下情况:<br />
+```c++
+std::vector<int> vec = {10,11,0x11223344,0x55667788};//容器中元素的类型为int,占用4个字节
+Frame frameM = Trans<2>::fromArray<Big>(vec);//将容器中的数据转换为占2个字节宽的数据帧,且大端保存
+Frame frameN = Trans<2>::fromArray<Little>(vec);//将容器中的数据转换为占2个字节宽的数据帧,且小段保存
+```
+frameM中的内容为:<ins>0x00 0x0A</ins>  <ins>0x00 0x0B</ins>  <ins>0x33 0x44</ins>  <ins>0x77 0x88</ins> <br />
+
 
 #### 3.静态数组转换函数：static Frame fromArray(const T(&array)[N]) 将静态数组按顺序转换为
 
