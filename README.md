@@ -59,6 +59,6 @@ This function is used to Throttler and Debounce.<br />
 ## FrameSerializer
 这是一个unsigned char数组序列化工具,主要可以用于各种通信协议的下的数据转换和组包。<br />
 该模板文件组要由以下几个部分组成:<br />
-1:Frame:用于表示一个数据帧,这是一个unsigned char的包装器,也是各个模板函数的返回类型
-2:Trans:这个模板类主要用于将数组、容器转换为对应的数据帧，或者按照给定的通信协议将函数参数按要求转换为对应的数据帧,以及将多个数据帧拼接成一个完整的数据帧。
-3:FrameCheck:用于对已有的unsigned char数组做数据校验,目前可以对数据做20多种crc校验以及和校验。
+1:Frame:用于表示一个数据帧,这是一个unsigned char的包装器,也是各个模板函数的返回类型。<br />
+2:Trans:这个模板类主要用于将数组、容器转换为对应的数据帧，或者按照给定的通信协议将函数参数按要求转换为对应的数据帧,以及将多个数据帧拼接成一个完整的数据帧。<br />
+3:FrameCheck:用于对已有的unsigned char数组做数据校验,目前可以对数据做20多种crc校验以及和校验。<br />
