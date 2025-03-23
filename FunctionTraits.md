@@ -67,7 +67,7 @@ print(frameF); //输出: 0x01 0x0A 0x03 0x04
 ```
 
 8.char*、unsigned char*、void*的隐式转换支持 <br />
-```
+```c++
 void func1(char* buf){}
 void func2(unsigned char* buf){}
 void func3(void* buf){}
@@ -81,7 +81,7 @@ func3(frameF);//正确运行
 10.unsigned long long size() 获取Frame数据长度(字节) <br />
 
 11.template<typename...T> static Frame combine(T&&...frames) 将若干个Frame按传入顺序拼接成完整的数据帧 <br />
-```
+```c++
 Frame frameX; //假设 frameX = 0x0A 0x0B 0x0C 0x0D
 Frame frameY; //假设 frameY = 0x01 0x02 0x03 0x04
 Frame frameZ; //假设 frameZ = 0x05 0x06 0x07 0x08
