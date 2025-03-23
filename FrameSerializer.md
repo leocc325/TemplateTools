@@ -163,16 +163,16 @@ Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,建议传入的容器为顺序容器。使用方法如下:
 ```c++
 std::vector<int> vec = {10,11,12,13};
-Frame frameJ = Trans<4>::fromArray(vec);//将vec中的每一个数据都转换为占用4字节长度unsigned char数组
-Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组
+Frame frameJ = Trans<4>::fromArray(vec);//将vec中的每一个数据都转换为每个数据占用4字节长度unsigned char数组
+Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为每个数据占用3字节长度unsigned char数组
 ```
 frameJ中的内容为:<ins>0x00 0x00 0x00 0x0A</ins>  <ins>0x00 0x00 0x00 0x0B</ins>   <ins>0x00 0x00 0x00 0x0C</ins>   <ins>0x00 0x00 0x00 0x0D</ins> <br />
 frameK中的内容为:<ins>0x00 0x00 0x0A</ins>  <ins>0x00 0x00 0x0B</ins>   <ins>0x00 0x00 0x0C</ins>   <ins>0x00 0x00 0x0D</ins> <br />
 同样的,***fromArray生成的数据帧默认是大端保存的***,如果需要生成小端保存的帧,也只需要在调用fromArray的时候指定大小端类型即可: <br />
 ```c++
 std::vector<int> vec = {10,11,12,13};
-Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组,大端保存
-Frame frameK_L = Trans<3>::fromArray<Little>(vec);//将vec中的每一个数据都转换为占用3字节长度unsigned char数组,小段保存
+Frame frameK = Trans<3>::fromArray(vec);//将vec中的每一个数据都转换为每个数据占用3字节长度unsigned char数组,大端保存
+Frame frameK_L = Trans<3>::fromArray<Little>(vec);//将vec中的每一个数据都转换为每个数据占用3字节长度unsigned char数组,小段保存
 ```
 frameK_L中的内容为:<ins>0x0A 0x00 0x00</ins>  <ins>0x0B 0x00 0x00</ins>   <ins>0x0C 0x00 0x00</ins>   <ins>0x0D 0x00 0x00</ins> <br />
 
@@ -180,16 +180,38 @@ frameK_L中的内容为:<ins>0x0A 0x00 0x00</ins>  <ins>0x0B 0x00 0x00</ins>   <
 例如将std::vector<int>中的数据转换为2字节大小的unsigned char数组,会出现以下情况:<br />
 ```c++
 std::vector<int> vec = {10,11,0x11223344,0x55667788};//容器中元素的类型为int,占用4个字节
-Frame frameM = Trans<2>::fromArray<Big>(vec);//将容器中的数据转换为占2个字节宽的数据帧,且大端保存
-Frame frameN = Trans<2>::fromArray<Little>(vec);//将容器中的数据转换为占2个字节宽的数据帧,且小段保存
+Frame frameM = Trans<2>::fromArray<Big>(vec);//将容器中的数据转换为每个数据占2个字节宽的数据帧,且大端保存
+Frame frameN = Trans<2>::fromArray<Little>(vec);//将容器中的数据转换为每个数据占2个字节宽的数据帧,且小端保存
 ```
 frameM中的内容为:<ins>0x00 0x0A</ins>  <ins>0x00 0x0B</ins>  <ins>0x33 0x44</ins>  <ins>0x77 0x88</ins> <br />
+frameN中的内容为:<ins>0x0A 0x00</ins>  <ins>0x0B 0x00</ins>  <ins>0x44 0x33</ins>  <ins>0x88 0x77</ins> <br />
+显然,由于在转换的时候指定用2字节长度去保存转换后的数据,2字节足够表示10和11但是不足够保存0x11223344和0x55667788, <br />
+所以对10和11两个数据没有影响,但是比较大的两个数的高位被截断了,***所以一定要注意转换后的字节长度能否容纳原数据*** <br />
+
+#### 3.静态数组转换函数：static Frame fromArray(const T(&array)[N]) 将静态数组按顺序转换为<ins>固定字节长度</ins>的unsigned char数组。
+注意事项同上,使用方法如下:
+```c++
+int arr[4] = {0xAA,0xBB,0xCC,0xDD};
+Frame frameO = Trans<3>::fromArray<Big>(arr);//将静态数组中的数据转换为每个数据占3个字节宽的数据帧,且大端保存
+Frame frameP = Trans<3>::fromArray<Little>(arr);//将静态数组中的数据转换为每个数据占3个字节宽的数据帧,且小端保存
+```
+frameO中的内容为:<ins>0x00 0x00 0xAA</ins>  <ins>0x00 0x00 0xBB</ins>  <ins>0x00 0x00 0xCC</ins>  <ins>0x00 0x00 0xDD</ins> <br />
+frameP中的内容为:<ins>0xAA 0x00 0x00</ins>  <ins>0xBB 0x00 0x00</ins>  <ins>0xCC 0x00 0x00</ins>  <ins>0xDD 0x00 0x00</ins> <br />
 
 
-#### 3.静态数组转换函数：static Frame fromArray(const T(&array)[N]) 将静态数组按顺序转换为
+#### 4.动态数组转换函数: static  Frame fromArray(const T* array,std::size_t length) 将静态数组按顺序转换为<ins>固定字节长度</ins>的unsigned char数组。
+注意事项同上,由于这个版本的fromArray接受的参数为一个动态数组指针,这里无法直接获取数组长度,所以需要在调用时将数组长度一并传入,使用方法如下:
+```c++
+int* arr = new int[4];
+//将arr赋值为:{0x11,0x22,0x33,0x44};
+Frame frameQ = Trans<3>::fromArray<Big>(arr,4);//将静态数组中的数据转换为每个数据占3个字节宽的数据帧,且大端保存
+Frame frameR = Trans<3>::fromArray<Little>(arr,4);//将静态数组中的数据转换为每个数据占3个字节宽的数据帧,且小端保存
+```
+frameQ中的内容为:<ins>0x00 0x00 0x11</ins>  <ins>0x00 0x00 0x22</ins>  <ins>0x00 0x00 0x33</ins>  <ins>0x00 0x00 0x44</ins> <br />
+frameR中的内容为:<ins>0x11 0x00 0x00</ins>  <ins>0x22 0x00 0x00</ins>  <ins>0x33 0x00 0x00</ins>  <ins>0x44 0x00 0x00</ins> <br />
 
-#### 4.动态数组转换函数: static  Frame fromArray(const T* array,std::size_t length)
-
+***注:Trans类并没有对容器或数组的类型进行限制,这也意味着你可以传入任意类型的数组或容器,比如浮点数数组、自定义类构成的容器。传入非无符号整数类型的转换结果是未知的,这一点需要使用者自己把控。<br />
+后续可能会加上对输入类型的限制,现在暂时不想加哈哈哈 ^_^*** <br />
 
 ## 三：关于类 FrameCheck 的成员函数和使用方法介绍
 
