@@ -213,6 +213,41 @@ private:
 template<unsigned...BytePerArg>
 struct Trans
 {
+    ///如果帧的长度和参数数量相等,则说明是一个数据占一个字节.如果帧的长度大于参数数量,则说明至少一个一个数据占用了两个以上的字节
+    template<unsigned ArgsNum,unsigned TotalLength>
+    struct OneBytePerArg{
+        static constexpr bool value =  (ArgsNum == TotalLength);
+    };
+
+    template<typename...Args>
+    constexpr static bool OneBytePerArg_v = OneBytePerArg<sizeof... (Args),Length<BytePerArg...>::value>::value;
+
+    /**
+     *根据通信协议将传入的参数转换为数据帧,适用于每个数据对应的字节数均是1的情况,这种情况下不区分大小端
+     */
+    template<ByteMode Mode = Big, typename...Args>
+    static typename std::enable_if<OneBytePerArg_v<Args...>,Frame>::type
+    byProtocol(Args...args)
+    {
+        Frame data(Length<BytePerArg...>::value);
+        TransByProtocolSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
+        return data;
+    }
+
+    /**
+     *根据通信协议将传入的参数转换为数据帧,适用于数据所占字节数不一致的情况，这种情况下需要区分大小端,默认为大端
+     */
+    template<ByteMode Mode = Big,typename...Args>
+    static typename std::enable_if<!OneBytePerArg_v<Args...>,Frame>::type
+    byProtocol(Args...args)
+    {
+        //数据所占字节数大于1个数据1字节时需要额外判断传入的参数数量是否和描述通信协议的模板参数数量一致
+        static_assert ( sizeof... (BytePerArg) == sizeof... (Args) , "the number of class template should be equal with the number of this function");
+
+        Frame data(Length<BytePerArg...>::value);
+        TransByProtocol<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
+        return data;
+    }
 
     ///将容器中的数据按顺序转换为占BytePerArg字节的char数组,容器必须存在size函数可获取容器内元素数量而且BytePerArg的数量只能为1,转换后的char数组默认为大端保存
     template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
@@ -276,42 +311,6 @@ struct Trans
             }
         }
 
-        return data;
-    }
-
-    ///如果帧的长度和参数数量相等,则说明是一个数据占一个字节.如果帧的长度大于参数数量,则说明至少一个一个数据占用了两个以上的字节
-    template<unsigned ArgsNum,unsigned TotalLength>
-    struct OneBytePerArg{
-        static constexpr bool value =  (ArgsNum == TotalLength);
-    };
-
-    template<typename...Args>
-    constexpr static bool OneBytePerArg_v = OneBytePerArg<sizeof... (Args),Length<BytePerArg...>::value>::value;
-
-    /**
-     *根据通信协议将传入的参数转换为数据帧,适用于每个数据对应的字节数均是1的情况,这种情况下不区分大小端
-     */
-    template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg_v<Args...>,Frame>::type
-    byProtocol(Args...args)
-    {
-        Frame data(Length<BytePerArg...>::value);
-        TransByProtocolSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
-        return data;
-    }
-
-    /**
-     *根据通信协议将传入的参数转换为数据帧,适用于数据所占字节数不一致的情况，这种情况下需要区分大小端,默认为大端
-     */
-    template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg_v<Args...>,Frame>::type
-    byProtocol(Args...args)
-    {
-        //数据所占字节数大于1个数据1字节时需要额外判断传入的参数数量是否和描述通信协议的模板参数数量一致
-        static_assert ( sizeof... (BytePerArg) == sizeof... (Args) , "the number of class template should be equal with the number of this function");
-
-        Frame data(Length<BytePerArg...>::value);
-        TransByProtocol<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
         return data;
     }
 
@@ -657,6 +656,22 @@ static void test()
     auto print = [](Frame& frame){
         qDebug()<<QByteArray(frame,frame.size()).toHex(' ').toUpper()<<sizeof (frame);
     };
+
+    Frame frameG = Trans<1,2,4,1,1>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
+    print(frameG);
+
+    Frame frameH = Trans<1,2,4,1,1>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
+    print(frameH);
+
+    unsigned char buf1[4] = {0x0A,0x0B,0x0C,0x0D};
+    unsigned char* buf2 = new unsigned char[4];
+    buf2[0] = 9;buf2[1] = 10;buf2[2] =11;buf2[3] = 12;
+
+    Frame fr1(buf1,4);
+    print(fr1);
+
+    Frame fr2(buf2,4);
+    print(fr2);
 
 //    Frame f0 =  Trans<1,2,3,2,2,3,4,1,1,2,3>::byProtocol(0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b);
 //    print(f0);
