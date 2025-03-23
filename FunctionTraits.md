@@ -61,7 +61,7 @@ print(frameF); //输出: 0x01 0x02 0x03 0x04
 
 7.[]获取数组某个索引上的引用 <br />
 ```c++
-unsigned char ch_1 = frameF[1]; //ch_1 is oxo1
+unsigned char ch = frameF[1]; //ch is oxo1
 frameF[1] = 0x0A;
 print(frameF); //输出: 0x01 0x0A 0x03 0x04
 ```
