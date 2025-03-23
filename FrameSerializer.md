@@ -214,4 +214,23 @@ frameR中的内容为:<ins>0x11 0x00 0x00</ins>  <ins>0x22 0x00 0x00</ins>  <ins
 后续可能会加上对输入类型的限制,现在暂时不想加哈哈哈 ^_^*** <br />
 
 ## 三：关于类 FrameCheck 的成员函数和使用方法介绍
+这个类主要用于对数据帧的数据做校验,主要包含两种类型的校验和校验、crc校验,其中crc校验类型又包含了20多种,基本上可以覆盖数据传输中常用的校验方式,具体的函数使用方法不一一介绍,因为每一种校验的参数基本上都是一致的,这里只拿crc16_modbus举例说明使用方法。 <br />
+校验函数的声明如下:
+```c++
+template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+static FunctionReturn<ResultByte,twoByte> crc16_modbus(unsigned char* data,unsigned start,unsigned end,int pos)
+```
+函数接受一个unsigned char指针(可以直接传入Frame对象),计算从start索引开始(包含start)到end索引处(包含end)的全部数据的校验值,pos表示将校验结果从pos处开始写入,一共写入ResultByte个字节长度,写入校验结果时默认按照mode类型(大端)写入。
+当pos<0时不写入校验结果到data数组,仅仅返回校验结果,当pos>=0返回校验结果,同时写入校验结果到pos处，***从pos处写入ResultByte个字节的数据时不能超出数组的总长度,否则会因为数组越界导致未定义行为(针对这个问题的保护机制会在后续加上)***。
 
+默认情况下不需要指定模板尖括号中的参数,和校验通常占用1字节,crc校验结果所占字节数与crc校验方式相关,例如crc8的校验结果占用1字节、crc16_modbus校验结果占用2字节、crc32校验结果占用4字节
+用户可以根据实际情况指定校验结果长度,这个长度可以大于默认长度(在不超过8字节长度限制的情况下,现在暂时没有开发超过8字节校验结果的校验方法)但是不能小于默认长度,当指定的长度小于默认长度时,模板FunctionReturn<ResultByte>会导致编译器报错,编译无法通过。
+代码示例如下:
+```c++
+Frame frameS = {0x11,0x22,0x33,ox44,ox55,ox66,ox77,ox88,ox99,0xAA,0xBB,x0CC};
+Check::crc
+```
+
+其他的校验方法使用方法也是如此,不再一一赘述(根据函数名应该就能知道这个校验是什么类型的)。
+
+## 四：一个完整的示例。
