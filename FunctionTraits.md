@@ -91,6 +91,18 @@ print(frameXYZ); //输出: 0x0A 0x0B 0x0C 0x0D 0x01 0x02 0x03 0x04 0x05 0x06 0x0
 ```
 
 ## class template<unsigned...BytePerArg>struct Trans
+Trans模板用于将给定的数组、容器、函数参数按通信协议转换为对应的数据帧(Frame),这个模板中的所有函数返回值均为Frame。<br />
+类模板参数unsigned...BytePerArg用于表明每一个数据在转换为数据帧(Frame)之后每一个数据所占的字节数,由于这是一个unsigned参数包,所以可以用BytePerArg来表示通信协议。<br />
+例如存在以下通信协议:<br />
+
+帧头  | 指令号 | 数据  | 校验和 | 帧尾
+----  | ----- | ----- | ----- | -----
+1字节 | 2字节 |  4字节 | 1字节 | 1字节
+
+那么我们可以通过以下的方式来创建一个对应的数据帧:
+```c++
+Frame frame = Trans<1,2,4,1,1>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
+```
 
 ## FrameCheck
 
