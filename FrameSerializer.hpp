@@ -12,74 +12,62 @@
 namespace FrameSerializer
 {
 namespace  {
-    enum ByteMode {
-        Big,
-        Little
-    };
+enum ByteMode {
+    Big,
+    Little
+};
 
-    ///计算总的字节长度
-    template<unsigned Byte,unsigned...RemainBytes>
-    struct Length{
-        static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
-    };
+///计算总的字节长度
+template<unsigned Byte,unsigned...RemainBytes>
+struct Length{
+    static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
+};
 
-    template<unsigned Byte>
-    struct Length<Byte>{
-        static constexpr unsigned value = Byte;
-    };
+template<unsigned Byte>
+struct Length<Byte>{
+    static constexpr unsigned value = Byte;
+};
 
-    ///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
-    ///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
-    template<typename First,typename...Args>
-    struct IsInteger{
-        static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
-    };
+///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
+///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
+template<typename First,typename...Args>
+struct IsInteger{
+    static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
+};
 
-    template<typename First>
-    struct IsInteger<First>{
-        static constexpr bool value = std::is_integral<First>::value;
-    };
+template<typename First>
+struct IsInteger<First>{
+    static constexpr bool value = std::is_integral<First>::value;
+};
 
-    ///验证类模板参数数量和函数模板参数数量一致，而且每一个实参都是整数
-    template<unsigned ClassArgNum,unsigned FuncArgNum,typename...Args>
-    struct Matchable{
-        static constexpr bool value = (ClassArgNum==FuncArgNum) && IsInteger<Args...>::value;
-    };
+///当前允许的校验结果最大字节数
+static constexpr unsigned maxCheckSize = 8;
 
-    ///传入的通信协议是否是每个数据占用一个字节
-    template<unsigned ClassArgNum,unsigned BytesLength,typename...Args>
-    struct OneBytePerArg{
-        static constexpr bool value = (ClassArgNum==1) && (BytesLength == sizeof... (Args)) && IsInteger<Args...>::value;
-    };
+///每一个字节的长度,固定为8位
+static constexpr unsigned CharBit = 8;
 
-    ///当前允许的校验结果最大字节数
-    static constexpr unsigned maxCheckSize = 8;
+enum DataSize{oneByte,twoByte,fourByte,eightByte};
 
-    ///每一个字节的长度,固定为8位
-    static constexpr unsigned CharBit = 8;
+static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
 
-    enum DataSize{oneByte,twoByte,fourByte,eightByte};
+///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
+template<unsigned Bytes>struct DataType{using type = void;};
 
-    static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
+template<> struct DataType<oneByte>{using type = unsigned char;};
 
-    ///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
-    template<unsigned Bytes>struct DataType{using type = void;};
+template<> struct DataType<twoByte>{using type = unsigned short;};
 
-    template<> struct DataType<oneByte>{using type = unsigned char;};
+template<> struct DataType<fourByte>{using type = unsigned int;};
 
-    template<> struct DataType<twoByte>{using type = unsigned short;};
+template<> struct DataType<eightByte>{using type = unsigned long long;};
 
-    template<> struct DataType<fourByte>{using type = unsigned int;};
+///别名模板,简化DataType的代码长度
+template<unsigned Bytes>
+using DT =  typename DataType<ByteWidthArray[Bytes]>::type;
 
-    template<> struct DataType<eightByte>{using type = unsigned long long;};
-
-    ///别名模板,简化DataType的代码长度
-    template<unsigned Bytes>
-    using DT =  typename DataType<ByteWidthArray[Bytes]>::type;
-
-    ///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量),超出8字节屏蔽模板
-    template<unsigned Bytes>
-    using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
+///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量),超出8字节屏蔽模板
+template<unsigned Bytes>
+using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize),DT<Bytes>>::type;
 }
 
 ///数据帧
@@ -98,19 +86,18 @@ class Frame
 
     ///将所有的Frame放入一个容器,用于组合
     template<typename T,typename...Args>
-    static unsigned long long frameVector(std::vector<Frame*>& vec,T& f,Args&...args)
+    static unsigned long long generateFrameVector( std::vector<Frame*>& vec,T& frame,Args&...args)
     {
-        unsigned long long size = f.size();
-        vec.push_back(f);
-        size += frameVector(vec,args...);
-        return size;
+        vec.push_back(&frame);
+        unsigned long long size = frame.size() + generateFrameVector(vec,args...);
+        return size  ;
     }
 
     template<typename T>
-    static unsigned long long frameVector(std::vector<Frame*>& vec,T& f)
+    static unsigned long long generateFrameVector(std::vector<Frame*>& vec,T& frame)
     {
-        vec.push_back(f);
-        return f.size();
+        vec.push_back(&frame);
+        return frame.size();
     }
 
 public:
@@ -190,32 +177,20 @@ public:
         return m_Size;
     }
 
-    ///将帧头、数据包、帧尾组合成一个完整的帧
-    ///HeadSize:帧头长度、DataSize:数据部分大小、TailSize:帧尾大小。单位全部为字节。
-    static Frame combineFrame(const unsigned char* head,unsigned HeadSize,
-                              const unsigned char* data,unsigned DataSize,
-                              const unsigned char* tail,unsigned TailSize)
-    {
-        Frame frame(HeadSize+DataSize+TailSize);
-        memcpy(frame.data(),head,HeadSize);
-        memcpy(frame.data()+HeadSize,data,DataSize);
-        memcpy(frame.data()+HeadSize+DataSize,tail,TailSize);
-        return frame;
-    }
-
     template<typename...T>
     static typename std::enable_if< IsFrame<std::decay_t<T>...>::value,Frame>::type
     combine(T&&...frames)
     {
         std::vector<Frame*> vec;
-        unsigned long long totalSize = generate(vec,frames...);
+        unsigned long long totalSize = generateFrameVector(vec,frames...);
 
         Frame frame(totalSize);
+
         unsigned long long index = 0;
-        for(Frame* f : vec)
+        for(Frame* frameTmp : vec)
         {
-            memcpy(frame.data() + index,f,f->size());
-            index += f->size();
+            memcpy(frame.data() + index,frameTmp,frameTmp->size());
+            index += frameTmp->size();
         }
 
         return frame;
@@ -235,25 +210,26 @@ private:
     unsigned long long m_Size = 0;
 };
 
-template<unsigned BytePerArg>
-class CharConverter{
+template<unsigned...BytePerArg>
+struct Trans
+{
 
-    ///将传入的容器转换为对应的char数组,容器必须存在size函数可获取容器内元素数量
-    ///mode:数据大端表示还是小端表示,默认为大端
-    ///BytePerData:每一个数据在转换之后占用多少个字节
+    ///将容器中的数据按顺序转换为占BytePerArg字节的char数组,容器必须存在size函数可获取容器内元素数量而且BytePerArg的数量只能为1,转换后的char数组默认为大端保存
     template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
-    static Frame setDataPack(const Array<T,Args...>& array)
+    static Frame fromArray(const Array<T,Args...>& array)
     {
-        std::size_t bufferSize = BytePerArg * array.size();
-        Frame data(bufferSize);
+        static_assert ( sizeof... (BytePerArg) == 1  , "the number of class template should be one");
+
+        unsigned byteLength = Length<BytePerArg...>::value;
+        Frame data(byteLength * array.size());
 
         unsigned argIndex = 0;
         for(const T& value : array)
         {
-            for(unsigned i = 0; i < BytePerArg; i++)
+            for(unsigned i = 0; i < byteLength; i++)
             {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[argIndex*BytePerArg+i] = static_cast<unsigned char>(value >> offset) & 0xFF ;
+                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
+                data[argIndex*byteLength+i] = static_cast<unsigned char>(value >> offset) & 0xFF ;
             }
             ++argIndex;
         }
@@ -261,56 +237,93 @@ class CharConverter{
         return data;
     }
 
+    ///将数组中的数据按顺序转换为占BytePerArg字节的char数组,而且BytePerArg的数量只能为1,转换后的char数组默认为大端保存
     template<ByteMode mode = Big,size_t N,typename T>
-    static Frame setDataPack(const T(&array)[N])
+    static   Frame fromArray(const T(&array)[N])
     {
-        std::size_t bufferSize = BytePerArg * N;
-        Frame data(bufferSize);
+        static_assert ( sizeof... (BytePerArg) == 1  , "the number of class template should be one");
+
+        unsigned byteLength = Length<BytePerArg...>::value;
+        Frame data(byteLength * N);
 
         for(int i = 0; i < N; i++)
         {
-            for(unsigned i = 0; i < BytePerArg; i++)
+            for(unsigned i = 0; i < byteLength; i++)
             {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
+                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
+                data[i*byteLength+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
             }
         }
 
         return data;
     }
 
-    ///将指针数组转换为char数组
+    ///将指针数组中的数据按顺序转换为占BytePerArg字节的char数组,而且BytePerArg的数量只能为1,转换后的char数组默认为大端保存
     template<ByteMode mode = Big,typename T>
-    static Frame setDataPack(const T* array,std::size_t length)
+    static  Frame fromArray(const T* array,std::size_t length)
     {
-        std::size_t bufferSize = BytePerArg * length;
-        Frame data(bufferSize);
+        static_assert ( sizeof... (BytePerArg) == 1  , "the number of class template should be one");
+
+        unsigned byteLength = Length<BytePerArg...>::value;
+        Frame data(byteLength * length);
 
         for(unsigned i = 0; i < length; i++)
         {
-            for(unsigned i = 0; i < BytePerArg; i++)
+            for(unsigned i = 0; i < byteLength; i++)
             {
-                unsigned offset = (mode == Big) ? (BytePerArg - i - 1) * CharBit : (i *CharBit );
-                data[i*BytePerArg+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
+                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
+                data[i*byteLength+i] = static_cast<unsigned char>(array[i] >> offset) & 0xFF ;
             }
         }
 
         return data;
     }
-};
 
-template<unsigned...BytePerArg>
-class FrameFix
-{
+    ///如果帧的长度和参数数量相等,则说明是一个数据占一个字节.如果帧的长度大于参数数量,则说明至少一个一个数据占用了两个以上的字节
+    template<unsigned ArgsNum,unsigned TotalLength>
+    struct OneBytePerArg{
+        static constexpr bool value =  (ArgsNum == TotalLength);
+    };
+
+    template<typename...Args>
+    constexpr static bool OneBytePerArg_v = OneBytePerArg<sizeof... (Args),Length<BytePerArg...>::value>::value;
+
+    /**
+     *根据通信协议将传入的参数转换为数据帧,适用于每个数据对应的字节数均是1的情况,这种情况下不区分大小端
+     */
+    template<ByteMode Mode = Big, typename...Args>
+    static typename std::enable_if<OneBytePerArg_v<Args...>,Frame>::type
+    byProtocol(Args...args)
+    {
+        Frame data(Length<BytePerArg...>::value);
+        TransByProtocolSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
+        return data;
+    }
+
+    /**
+     *根据通信协议将传入的参数转换为数据帧,适用于数据所占字节数不一致的情况，这种情况下需要区分大小端,默认为大端
+     */
+    template<ByteMode Mode = Big,typename...Args>
+    static typename std::enable_if<!OneBytePerArg_v<Args...>,Frame>::type
+    byProtocol(Args...args)
+    {
+        //数据所占字节数大于1个数据1字节时需要额外判断传入的参数数量是否和描述通信协议的模板参数数量一致
+        static_assert ( sizeof... (BytePerArg) == sizeof... (Args) , "the number of class template should be equal with the number of this function");
+
+        Frame data(Length<BytePerArg...>::value);
+        TransByProtocol<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
+        return data;
+    }
+
 private:
     ///情况1:数据帧长度固定为N,每一个数据占用1字节的长度时调用此递归模板
-    template<unsigned Byte> struct FixTransSingle
+    template<unsigned Byte> struct TransByProtocolSingle
     {
         template<typename First,typename...Args>
         static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
         {
             data[pos] = static_cast<unsigned char>(first) & 0xFF ;
-            FixTransSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
+            TransByProtocolSingle<Byte>::transImpl(data,pos+1,std::forward<Args>(args)...);
         }
 
         template<typename Arg>
@@ -320,9 +333,9 @@ private:
         }
     };
 
-    ///情况2:数据帧长度固定为N,每一个数据占用的字节长度不等时调用此递归模板FixTrans
+    ///情况2:数据帧长度固定为N,每一个数据占用的字节长度不等时调用此递归模板
     template<unsigned Byte,unsigned...RemainBytes>
-    struct FixTrans
+    struct TransByProtocol
     {
         template<typename First,typename...Args> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,First first,Args...args)
         {
@@ -331,7 +344,7 @@ private:
                 unsigned offset = (mode == Big) ? (Byte - i - 1) * CharBit : (i *CharBit );
                 data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
             }
-            FixTrans<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
+            TransByProtocol<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
         }
 
         ///只剩下最后一个参数时递归模板终止
@@ -345,30 +358,6 @@ private:
         }
     };
 
-public:
-    ///总长度固定,单个数据长度可变的转换
-    template<ByteMode Mode = Big,typename...Args>
-    static typename std::enable_if<!OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,Frame>::type
-    trans(Args...args)
-    {
-        static_assert (Matchable<sizeof... (BytePerArg),sizeof... (Args),Args...>::value,"error");
-
-        Frame data(Length<BytePerArg...>::value);
-        FixTrans<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
-        return data;
-    }
-
-    ///总长度固定,单个数据长度1字节的转换
-    template<ByteMode Mode = Big, typename...Args>
-    static typename std::enable_if<OneBytePerArg<sizeof... (BytePerArg),Length<BytePerArg...>::value,Args...>::value,Frame>::type
-    trans(Args...args)
-    {
-        static_assert (sizeof... (Args) == Length<BytePerArg...>::value,"error");
-
-        Frame data(Length<BytePerArg...>::value);
-        FixTransSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
-        return data;
-    }
 };
 
 class FrameCheck
@@ -660,32 +649,48 @@ public:
     }
 };
 
-static void test(){
-    Frame data = FrameFix<8>::trans<Big>(0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88);
+#include <vector>
+#include <QByteArray>
 
-    FrameCheck::crc4_itu(data,0,7,7);//0x05
-    FrameCheck::crc5_epc(data,0,7,7);//0x0f
-    FrameCheck::crc5_itu(data,0,7,7);//0x05
-    FrameCheck::crc5_usb(data,0,7,7);
-    FrameCheck::crc6_itu(data,0,7,7);
-    FrameCheck::crc7_mmc(data,0,7,7);
-    FrameCheck::crc8(data,0,7,7);
-    FrameCheck::crc8_itu(data,0,7,7);
-    FrameCheck::crc8_rohc(data,0,7,7);
-    FrameCheck::crc8_maxim(data,0,7,7);
-    FrameCheck::crc16_dnp(data,0,7,7);
-    FrameCheck::crc16_ibm(data,0,7,7);
-    FrameCheck::crc16_usb(data,0,7,7);
-    FrameCheck::crc16_x25(data,0,7,7);
-    FrameCheck::crc16_ccitt(data,0,7,7);
-    FrameCheck::crc16_maxim(data,0,7,7);
-    FrameCheck::crc16_modbus(data,0,7,7);
-    FrameCheck::crc16_xmodem(data,0,7,7);
-    FrameCheck::crc16_ccitt_false(data,0,7,7);
-    FrameCheck::crc32(data,0,7,7);
-    FrameCheck::crc32_c(data,0,7,7);
-    FrameCheck::crc32_mpeg2(data,0,7,7);
-    FrameCheck::crc32_koopman(data,0,7,7);
+static void test()
+{
+    auto print = [](Frame& frame){
+        qDebug()<<QByteArray(frame,frame.size()).toHex(' ').toUpper()<<sizeof (frame);
+    };
+
+//    Frame f0 =  Trans<1,2,3,2,2,3,4,1,1,2,3>::byProtocol(0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b);
+//    print(f0);
+
+    Frame f1 =  Trans<4>::byProtocol(0x01,0x02,0x03,0x04);
+    print(f1);
+
+    Frame f2 =  Trans<1,2,2,1>::byProtocol(0x01,0x02,0x03,0x04);
+    print(f2);
+
+    Frame f3 =  Trans<1,2,2,1>::byProtocol<Little>(0x01,0x02,0x03,0x04);
+    print(f3);
+
+    Frame f4 = Frame::combine(f1,f2,f3);
+    print(f4);
+
+    std::vector<unsigned> array1 = {1,2,3,4};
+    unsigned array2[4] = {5,6,7,8};
+    unsigned* array3 = new unsigned[4];
+    array3[0] = 9;array3[1] = 10;array3[2] =11;array3[3] = 12;
+
+    Frame f5 = Trans<2>::fromArray(array1);
+    print(f5);
+
+    Frame f6 = Trans<2>::fromArray<Little>(array2);
+    print(f6);
+
+    Frame f7 = Trans<3>::fromArray<Big>(array3,4);
+    print(f7);
+
+    Frame f8 = Trans<3>::fromArray<Little>(array3,4);
+    print(f8);
+
+    int a = 10;
 }
 
 }
