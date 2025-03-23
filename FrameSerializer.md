@@ -1,4 +1,4 @@
-# 这是一个FunctionTraits.hpp的使用说明
+# 这是一个FrameSerializer.hpp的使用说明
 
 假设:有一个print函数用于打印数据数据
 ```c++
@@ -149,6 +149,12 @@ Frame frameI = Trans<5>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIbig = Trans<5>::byProtocol<Big>(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 ```
+
+#### 如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是不确定的,此时无法再通过byProtocol生成数据帧,也是不现实的,因为通信协议太长会导致模板在展开时代码膨胀,这会严重影响代码的编译效率,同时使编译后的文件体积陡然变大
+#### 为了应对这种情况,我们可以将这种长度不定用于传输数据的帧拆分为三个部分: <ins>帧头段、数据段、帧尾段</ins>。
+#### <ins>帧头段、帧尾段</ins>一定是可以根据通信协议确定的固定长度帧,这两部分数据可以通过byProtocol生成
+#### <ins>数据段</ins>则通过下方将要介绍函数生成。
+
 
 1.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的数据并组成一个unsigned char数组。 <br />
 这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,而且转换之后每个数据所占长度只能是固定值。
