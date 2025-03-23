@@ -141,6 +141,8 @@ Frame frameH = Trans<1,2,4,1,1>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 //因为通信协议B的总长度为5,所以我们直接写入Trans<5>即可,而不需要写成frameJ那样
 Frame frameI = Trans<5>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameJ = Trans<1,1,1,1,1>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
+print(frameI); //输出 0x5A 0x02 0x11 0x12 0xA5
+print(frameJ); //输出 0x5A 0x02 0x11 0x12 0xA5
 ```
 事实上frameI和frameJ的内容是完全一致的,但是依然推荐选择frameI的方式,这种方式更简洁、效率高效(因为不需要做frameJ那么多的模板展开)。<br />
 此外,当通信协议规定每一个数据只占用一个字节时,指定大小端也是无效的,即以下三种调用方式其实也是等价的
@@ -155,15 +157,13 @@ Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 #### <ins>帧头段、帧尾段</ins>一定是可以根据通信协议确定的固定长度帧,这两部分数据可以通过byProtocol生成
 #### <ins>数据段</ins>则通过下方将要介绍函数生成。
 
-
-1.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的数据并组成一个unsigned char数组。 <br />
+#### 2.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的数据并组成一个unsigned char数组。
 这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,而且转换之后每个数据所占长度只能是固定值。
 
-2.数组转换函数：
+#### 3.静态数组转换函数：static Frame fromArray(const T(&array)[N]) 将静态数组按顺序转换为
 
-3.指针数组转换函数:
+#### 4.动态数组转换函数: static  Frame fromArray(const T* array,std::size_t length)
 
 
-
-## FrameCheck
+## 关于类 FrameCheck 的成员函数和使用方法介绍
 
