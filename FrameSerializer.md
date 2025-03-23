@@ -10,7 +10,7 @@ void print(unsigned char* buf){
 }
 ```
 
-## 关于类 Frame 的成员函数和使用方法介绍
+## 一：关于类 Frame 的成员函数和使用方法介绍
 Frame用于表示一个数据帧,这是一个unsigned char的包装器,也是各个模板函数的返回类型。 <br />
 这个类不支持拷贝,支持移动赋值和移动构造,支持[]获取数据,支持隐式转换为char*、unsigned char*、void*。<br />
 
@@ -92,7 +92,7 @@ print(frameACB); //输出: 0x0A 0x0B 0x0C 0x0D 0x01 0x02 0x03 0x04 0x05 0x06 0x0
 ```
 #### 注: Frame基本上可以作为unsigned char*的平替,需要使用char*、unsigned char*、void*等参数类型的地方基本上都可以直接传入Frame对象,无需再做额外的转换或者使用data()函数获取Frame对象内部的数组指针。 <br />
 
-## 关于类模板 template<unsigned...BytePerArg>struct Trans 的成员函数和使用方法介绍
+## 二：关于类模板 template<unsigned...BytePerArg>struct Trans 的成员函数和使用方法介绍
 Trans模板用于将给定的数组、容器、函数参数按通信协议转换为对应的数据帧(Frame),这个模板中的所有函数返回值均为Frame。<br />
 类模板参数unsigned...BytePerArg用于表明每一个数据在转换为数据帧(Frame)之后每一个数据所占的字节数,由于这是一个unsigned参数包,所以可以用BytePerArg...来表示通信协议。<br />
 但是通过通信协议转换函数参数为数据帧和通过数组转换为数据帧存在一些区别,下面将介绍各个转换函数使用方法和注意事项。<br />
@@ -152,10 +152,10 @@ Frame frameIbig = Trans<5>::byProtocol<Big>(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 ```
 
-#### 如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是不确定的,此时无法再通过byProtocol生成数据帧,也是不现实的,因为通信协议太长会导致模板在展开时代码膨胀,这会严重影响代码的编译效率,同时使编译后的文件体积陡然变大
+#### 如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是不确定的,此时无法再通过byProtocol生成数据帧,也是不现实的,因为通信协议太长会导致模板在展开时代码膨胀,这会严重影响代码的编译效率,同时使编译后的文件体积急剧增加
 #### 为了应对这种情况,我们可以将这种长度不定用于传输数据的帧拆分为三个部分: <ins>帧头段、数据段、帧尾段</ins>。
 #### <ins>帧头段、帧尾段</ins>一定是可以根据通信协议确定的固定长度帧,这两部分数据可以通过byProtocol生成
-#### <ins>数据段</ins>则通过下方将要介绍函数生成。
+#### <ins>数据段</ins>则通过下方将要介绍函数生成,***由于数据段中每一个数据所占长度通常都是固定的,所以这一部分xxxxxxxxxx***。
 
 #### 2.容器转换函数:static Frame fromArray(const Array<T,Args...>& array) 将给定的容器中的数据按顺序转换为<ins>固定字节长度</ins>的数据并组成一个unsigned char数组。
 这个函数支持将多种容器作为参数,传入的容器内部需要<ins>存在siez()函数</ins>用于获取容器数据长度,而且转换之后每个数据所占长度只能是固定值。
@@ -165,5 +165,5 @@ Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 #### 4.动态数组转换函数: static  Frame fromArray(const T* array,std::size_t length)
 
 
-## 关于类 FrameCheck 的成员函数和使用方法介绍
+## 三：关于类 FrameCheck 的成员函数和使用方法介绍
 
