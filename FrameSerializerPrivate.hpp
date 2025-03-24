@@ -8,66 +8,6 @@
 
 namespace FrameSerializer
 {
-    namespace
-    {
-        enum ByteMode {
-            Big,
-            Little
-        };
-
-        ///计算总的字节长度
-        template<unsigned Byte,unsigned...RemainBytes>
-        struct Length{
-            static constexpr unsigned value = Byte + Length<RemainBytes...>::value;
-        };
-
-        template<unsigned Byte>
-        struct Length<Byte>{
-            static constexpr unsigned value = Byte;
-        };
-
-        ///判断是否每一个变量都是整形,只支持内建的整形变量,不支持隐式转换:例如枚举变量、浮点值、或者其他可以隐式转换为整数的类型
-        ///传入错误类型会导致编译报错,如果要传入这些变量,需要在传入之前自行转换类型为内建类型
-        template<typename First,typename...Args>
-        struct IsInteger{
-            static constexpr bool value = std::is_integral<First>::value && IsInteger<Args...>::value;
-        };
-
-        template<typename First>
-        struct IsInteger<First>{
-            static constexpr bool value = std::is_integral<First>::value;
-        };
-
-        ///当前允许的校验结果最大字节数
-        static constexpr unsigned maxCheckSize = 8;
-
-        ///每一个字节的长度,固定为8位
-        static constexpr unsigned CharBit = 8;
-
-        enum DataSize{oneByte = 1,twoByte = 2,fourByte = 4,eightByte = 8};
-
-        static constexpr  DataSize ByteWidthArray[maxCheckSize] = {oneByte,twoByte,fourByte,fourByte,eightByte,eightByte,eightByte,eightByte};
-
-        ///根据当前数据所占字节数返回一个能容纳数据长度的变量类型
-        template<unsigned Bytes>struct DataType{using type = void;};
-
-        template<> struct DataType<oneByte>{using type = unsigned char;};
-
-        template<> struct DataType<twoByte>{using type = unsigned short;};
-
-        template<> struct DataType<fourByte>{using type = unsigned int;};
-
-        template<> struct DataType<eightByte>{using type = unsigned long long;};
-
-        ///别名模板,简化DataType的代码长度
-        template<unsigned Bytes>
-        using DT =  typename DataType<ByteWidthArray[Bytes-1]>::type;
-
-        ///判断当前校验结果的长度是否超出8字节(一般不会用到超出8个字节的整形变量)或者小于最短字节数,超出8字节屏蔽模板
-        template<unsigned Bytes,unsigned Min>
-        using FunctionReturn = typename std::enable_if<(Bytes < maxCheckSize) && (Bytes >= Min),DT<Bytes>>::type;
-    }
-
     ///数据帧
     class Frame
     {
