@@ -127,7 +127,7 @@ namespace FrameSerializer
             unsigned long long index = 0;
             for(Frame* frameTmp : vec)
             {
-                memcpy(frame.data() + index,frameTmp,frameTmp->size());
+                memcpy(frame.data() + index,frameTmp->data(),frameTmp->size());
                 index += frameTmp->size();
             }
 
