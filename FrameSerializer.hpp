@@ -1,4 +1,4 @@
-#ifndef PARAMETERSERIALIZER_HPP
+﻿#ifndef PARAMETERSERIALIZER_HPP
 #define PARAMETERSERIALIZER_HPP
 
 #include "FrameSerializerPrivate.hpp"
@@ -107,7 +107,7 @@ struct Trans
     static Frame fromArray(const Array<T,Args...>& array)
     {
         static_assert (sizeof... (BytePerArg) == 1, "the number of class template should be one");
-        static_assert (IsNumeric<Args...>::value, "All input parameters should be convertible to integer types.");
+        static_assert (IsNumeric<T>::value, "All input parameters should be convertible to integer types.");
 
         unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * array.size());
@@ -304,7 +304,7 @@ class FrameCheck
 public:
     ///对给定的char数组计算校验和:计算给定数组data从start处开始到end处结尾所有字节的校验和,校验结果占用ResultByte字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
     ///当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> sum(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte>  sum = 0;
@@ -318,7 +318,7 @@ public:
 
     /// 对给定的char数组计算crc校验:计算给定数组data从start处开始到end处结尾所有字节的crc,校验结果占用ResultByte字节大小,放置到数组pos处,Mode表明校验结果是大端存储还是小端存储
     /// 当pos小于0时不会在源数据中写入校验结果(相当于仅仅计算并返回校验值)
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc4_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<4,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
@@ -326,7 +326,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc5_epc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<5,unsigned char,0x09,0x09,0x00,false,false>(data,start,end);
@@ -334,7 +334,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc5_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<5,unsigned char,0x15,0x00,0x00,true,true>(data,start,end);
@@ -342,7 +342,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc5_usb(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<5,unsigned char,0x05,0x1F,0x1F,true,true>(data,start,end);
@@ -350,7 +350,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc6_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<6,unsigned char,0x03,0x00,0x00,true,true>(data,start,end);
@@ -358,7 +358,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc7_mmc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<7,unsigned char,0x09,0x00,0x00,false,false>(data,start,end);
@@ -366,7 +366,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc8(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0x00,0x00,false,false>(data,start,end);
@@ -374,7 +374,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc8_itu(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0x00,0x55,false,false>(data,start,end);
@@ -382,7 +382,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc8_rohc(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<8,unsigned char,0x07,0xFF,0x00,true,true>(data,start,end);
@@ -390,7 +390,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = oneByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = oneByte>
     static FunctionReturn<ResultByte,oneByte> crc8_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<8,unsigned char,0x31,0x00,0x00,true,true>(data,start,end);
@@ -398,7 +398,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_ibm(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0x000,0x000,true,true>(data,start,end);
@@ -406,7 +406,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_maxim(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0x0000,0xFFFF,true,true>(data,start,end);
@@ -414,7 +414,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_usb(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0xFFFF,true,true>(data,start,end);
@@ -422,7 +422,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_modbus(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x8005,0xFFFF,0x0000,true,true>(data,start,end);
@@ -430,7 +430,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_ccitt(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,true,true>(data,start,end);
@@ -438,7 +438,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_ccitt_false(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0x0000,false,false>(data,start,end);
@@ -446,7 +446,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_x25(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0xFFFF,0xFFFF,true,true>(data,start,end);
@@ -454,7 +454,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_xmodem(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x1021,0x0000,0x0000,false,false>(data,start,end);
@@ -462,7 +462,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = twoByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = twoByte>
     static FunctionReturn<ResultByte,twoByte> crc16_dnp(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<16,unsigned short,0x3d65,0x0000,0xFFFF,true,true>(data,start,end);
@@ -470,7 +470,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = fourByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = fourByte>
     static FunctionReturn<ResultByte,fourByte> crc32(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
@@ -478,7 +478,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = fourByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = fourByte>
     static FunctionReturn<ResultByte,fourByte> crc32_c(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<32,unsigned int,0x01EDC6F41,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
@@ -486,7 +486,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = fourByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = fourByte>
     static FunctionReturn<ResultByte,fourByte> crc32_koopman(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<32,unsigned int,0x741B8CD7,0xFFFFFFFF,0xFFFFFFFF,true,true>(data,start,end);
@@ -494,7 +494,7 @@ public:
         return crc;
     }
 
-    template <unsigned ResultByte = fourByte,ByteMode mode = Big>
+    template <ByteMode mode = Big,unsigned ResultByte = fourByte>
     static FunctionReturn<ResultByte,fourByte> crc32_mpeg2(unsigned char* data,unsigned start,unsigned end,int pos)
     {
         DT<ResultByte> crc =  crcImpl<32,unsigned int,0x04C11DB7,0xFFFFFFFF,0x00000000,false,false>(data,start,end);
@@ -502,29 +502,6 @@ public:
         return crc;
     }
 };
-
-#include <vector>
-#include <QByteArray>
-
-static void test()
-{
-    auto print = [](Frame& frame){
-        qDebug()<<QByteArray(frame,frame.size()).toHex(' ').toUpper()<<sizeof (frame);
-    };
-
-    unsigned char arr[12] = {0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88,0x99,0xAA,0xBB,0xCC};
-    Frame frameS(arr,12);
-    print(frameS);
-
-    FrameCheck::crc16_modbus(frameS,1,7,-1);
-
-    FrameCheck::crc16_modbus(frameS,1,7,8);
-
-    FrameCheck::crc16_modbus<4,Big>(frameS,1,8,9);
-
-    int a = 10;
-}
-
 }
 
 #endif // PARAMETERSERIALIZER_HPP
