@@ -23,6 +23,9 @@ DelayTask::~DelayTask()
 
 void DelayTask::changeDelay(std::size_t mseconds)
 {
+    if(m_Delay == mseconds)
+        return;
+    
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
         m_Delay = mseconds;
