@@ -25,6 +25,12 @@ public:
         m_Thread = std::thread(&ThreadQueue::run,this);
     }
 
+    ~ThreadQueue()
+    {
+        m_Stop.store(true,std::memory_order_relaxed);
+        m_CV.notify_one();
+    }
+
     bool empty()
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
