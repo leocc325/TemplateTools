@@ -115,7 +115,7 @@ public:
         add<mode>([task](){
             (*task)();
         });
-        return std::move(future);
+        return future;
     }
 
     template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
@@ -127,7 +127,7 @@ public:
         add<mode>([task](){
             (*task)();
         });
-        return std::move(future);
+        return future;
     }
 
     template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args>
