@@ -25,6 +25,12 @@ public:
         m_Thread = std::thread(&ThreadQueue::run,this);
     }
 
+    ~ThreadQueue()
+    {
+        m_Stop.store(true,std::memory_order_relaxed);
+        m_CV.notify_one();
+    }
+
     bool empty()
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
@@ -109,7 +115,7 @@ public:
         add<mode>([task](){
             (*task)();
         });
-        return std::move(future);
+        return future;
     }
 
     template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
@@ -121,7 +127,7 @@ public:
         add<mode>([task](){
             (*task)();
         });
-        return std::move(future);
+        return future;
     }
 
     template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args>
