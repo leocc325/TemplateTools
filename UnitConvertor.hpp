@@ -31,22 +31,30 @@ namespace UnitConvertor
     template<long int Num,long int Den>
     struct IsRatio<std::ratio<Num,Den>>:public std::true_type{};
 
-    template<template<int,int> class R>
-    struct ss:public std::false_type{};
-
-    ///将数值转换为字符串
-
-    ///将数值转换为另一个单位表示的数值
-
-    ///将数值自动转换为一个恰当单位表示的字符串
-
-
-    ///
+    ///将以From为单位的数值转换为以T为单位表示的数值
     template<typename From,typename To>
-    static typename std::enable_if<IsRatio<From>::value&&IsRatio<To>::value,void>::type
+    static typename std::enable_if<IsRatio<From>::value&&IsRatio<To>::value,double>::type
+    toValue(double value)
+    {
+        using RatioType = typename std::ratio_divide<From,To>::type;
+        double newRatio = static_cast<double>(RatioType::num) / static_cast<double>(RatioType::den);
+        return value * newRatio;
+    }
+
+    ///将以From为单位的数值转换为以T为单位表示的字符串
+    template<typename From,typename To>
+    static typename std::enable_if<IsRatio<From>::value&&IsRatio<To>::value,double>::type
     toString(double value)
     {
 
+    }
+
+    ///将数值自动转换为一个恰当单位表示的字符串
+    template<typename From>
+    static typename std::enable_if<IsRatio<From>::value,double>::type
+    toProperString(double value)
+    {
+        using RatioType = typename std::ratio_divide<From,One>::type;
     }
 };
 
