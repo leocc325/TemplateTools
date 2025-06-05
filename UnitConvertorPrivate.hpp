@@ -2,27 +2,28 @@
 #define UNITCONVERTORPRIVATE_H
 
 #include <ratio>
+#include <QString>
 
 namespace UnitConvertor
 {
     ///这里重新定义了标准库std::ratio别名的原因是增加了部分比例类型
-    using ExpAtto      =   std::atto; //10^-18 阿 a
-    using ExpFemto  =   std::femto;//10^-15飞 f
-    using ExpPico     =   std::pico;//10^-12 皮 p
-    using ExpNano   =   std::nano;//10^-9 纳 n
-    using ExpMicro  =   std::micro;//10^-6 微 μ
-    using ExpMilli   =   std::milli;//10^-3 毫 m
-    using ExpCenti  =   std::centi;//10^-2 厘 c
-    using ExpDeci   =   std::deci;//10^-1 分 d
-    using ExpOne    =   std::ratio<1,1>;//1 个
-    using ExpDeca   =   std::deca;//10^1 十 da
-    using ExpHecto  =   std::hecto;//10^2 百 h
-    using ExpKilo   =   std::kilo;//10^3 千 k
-    using ExpMega   =   std::mega;//10^6兆M
-    using ExpGiga   =   std::giga;//10^9吉G
-    using ExpTera   =   std::tera;//10^12太T
-    using ExpPeta   =   std::peta;//10^15拍P
-    using ExpExa    =   std::exa;//10^18艾E
+    using Atto   =   std::atto; //10^-18 阿 a
+    using Femto  =   std::femto;//10^-15飞 f
+    using Pico   =   std::pico;//10^-12 皮 p
+    using Nano   =   std::nano;//10^-9 纳 n
+    using Micro  =   std::micro;//10^-6 微 μ
+    using Milli  =   std::milli;//10^-3 毫 m
+    using Centi  =   std::centi;//10^-2 厘 c
+    using Deci   =   std::deci;//10^-1 分 d
+    using One    =   std::ratio<1,1>;//1 个
+    using Deca   =   std::deca;//10^1 十 da
+    using Hecto  =   std::hecto;//10^2 百 h
+    using Kilo   =   std::kilo;//10^3 千 k
+    using Mega   =   std::mega;//10^6兆M
+    using Giga   =   std::giga;//10^9吉G
+    using Tera   =   std::tera;//10^12太T
+    using Peta   =   std::peta;//10^15拍P
+    using Exa    =   std::exa;//10^18艾E
 
     enum ExpEnum {
         EnumAtto,
@@ -32,7 +33,7 @@ namespace UnitConvertor
         EnumMicro,
         EnumMilli,
         EnumCenti,
-        numDeci,
+        EnumDeci,
         EnumOne,
         EnumDeca,
         EnumHecto,
@@ -45,52 +46,56 @@ namespace UnitConvertor
         EnumExpNum
     };
 
+    static const QString Exps[EnumExpNum] = {"a","f","p","n","u","m","c","d"," ","da","h","k","M","G","T","P","E"};
+
     enum UnitEnum
     {
-        UnitNum
+        EnumNull,
+        EnumFrequency,
+        EnumVoltage,
+        EnumCurrent,
+        EnumTime,
+        EnumUnitNum
     };
 
-    template<typename T> struct ExpChar{static constexpr char  c =  '?' ;};
+    static const QString Units[EnumUnitNum] = {"null","Hz","V","A","s"};
 
-    template<> struct ExpChar<ExpAtto>{static constexpr char  c =  'a' ;};
+    ///根据ratio类型获取数量级字符
+    template<typename T> struct ExpHelper{static constexpr ExpEnum  E =  EnumExpNum ;};
 
-    template<> struct ExpChar<ExpFemto>{static constexpr char  c =  'f' ;};
+    template<> struct ExpHelper<Atto>{static constexpr ExpEnum  E =  EnumAtto ;};
 
-    template<> struct ExpChar<ExpPico>{static constexpr char  c =  'p' ;};
+    template<> struct ExpHelper<Femto>{static constexpr ExpEnum  E =  EnumFemto ;};
 
-    template<> struct ExpChar<ExpNano>{static constexpr char  c =  'n' ;};
+    template<> struct ExpHelper<Pico>{static constexpr ExpEnum  E =  EnumPico ;};
 
-    template<> struct ExpChar<ExpMicro>{static constexpr char  c =  'u' ;};
+    template<> struct ExpHelper<Nano>{static constexpr ExpEnum  E =  EnumNano ;};
 
-    template<> struct ExpChar<ExpMilli>{static constexpr char  c =  'm' ;};
+    template<> struct ExpHelper<Micro>{static constexpr ExpEnum  E =  EnumMicro ;};
 
-    template<> struct ExpChar<ExpCenti>{static constexpr char  c =  'c' ;};
+    template<> struct ExpHelper<Milli>{static constexpr ExpEnum  E =  EnumMilli ;};
 
-    template<> struct ExpChar<ExpDeci>{static constexpr char  c =  'd' ;};
+    template<> struct ExpHelper<Centi>{static constexpr ExpEnum  E =  EnumCenti ;};
 
-    template<> struct ExpChar<ExpOne>{static constexpr char  c =  ' ' ;};
+    template<> struct ExpHelper<Deci>{static constexpr ExpEnum  E =  EnumDeci ;};
 
-    template<> struct ExpChar<ExpDeca>{static constexpr char  c =  'D' ;};//实际上应该是da
+    template<> struct ExpHelper<One>{static constexpr ExpEnum  E =  EnumOne ;};
 
-    template<> struct ExpChar<ExpHecto>{static constexpr char  c =  'h' ;};
+    template<> struct ExpHelper<Deca>{static constexpr ExpEnum  E =  EnumDeca ;};
 
-    template<> struct ExpChar<ExpKilo>{static constexpr char  c =  'k' ;};
+    template<> struct ExpHelper<Hecto>{static constexpr ExpEnum  E =  EnumHecto ;};
 
-    template<> struct ExpChar<ExpMega>{static constexpr char  c =  'M' ;};
+    template<> struct ExpHelper<Kilo>{static constexpr ExpEnum  E =  EnumKilo ;};
 
-    template<> struct ExpChar<ExpGiga>{static constexpr char  c =  'G' ;};
+    template<> struct ExpHelper<Mega>{static constexpr ExpEnum  E =  EnumMega ;};
 
-    template<> struct ExpChar<ExpTera>{static constexpr char  c =  'T' ;};
+    template<> struct ExpHelper<Giga>{static constexpr ExpEnum  E =  EnumGiga ;};
 
-    template<> struct ExpChar<ExpPeta>{static constexpr char  c =  'P' ;};
+    template<> struct ExpHelper<Tera>{static constexpr ExpEnum  E =  EnumTera ;};
 
-    template<> struct ExpChar<ExpExa>{static constexpr char  c =  'E' ;};
+    template<> struct ExpHelper<Peta>{static constexpr ExpEnum  E =  EnumPeta ;};
 
-    struct ValuePack{
-        double value;
-        ExpEnum exp;
-        UnitEnum unit;
-    };
+    template<> struct ExpHelper<Exa>{static constexpr ExpEnum  E =  EnumExa ;};
 
     ///判断给定类型是否是std::ratio类型
     template<typename T>
