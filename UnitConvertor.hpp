@@ -1,6 +1,11 @@
 ﻿#ifndef UNITCONVERTOR_HPP
 #define UNITCONVERTOR_HPP
 
+//#define USE_QSTRING
+
+#ifdef USE_QSTRING
+#include <QStringList>
+#endif
 #include "UnitConvertorPrivate.hpp"
 
 namespace UC = UnitConvertor;
@@ -13,9 +18,15 @@ namespace UnitConvertor
             return value;
         };
 
+        operator std::string() {
+            return std::to_string(value)+std::string(Exps[exp])+std::string(Units[unit]);
+        };
+
+#ifdef USE_QSTRING
         operator QString() {
             return QString("%1 %2%3").arg(value).arg(Exps[exp]).arg(Units[unit]);
         };
+#endif
 
         double value  = 20;
         ExpEnum exp   = EnumExpNum;
@@ -30,14 +41,6 @@ namespace UnitConvertor
         using RatioType = typename std::ratio_divide<From,To>::type;
         double newRatio = static_cast<double>(RatioType::num) / static_cast<double>(RatioType::den);
         return ValuePack{value*newRatio,ExpHelper<RatioType>::E,unit};
-    }
-
-    ///将字符串转换为以To为单位表示的数据包
-    template<typename To>
-    static typename std::enable_if<IsRatio<To>::value,ValuePack>::type
-    fromString(const QString& value)
-    {
-
     }
 
     ///将数值自动转换为一个恰当单位表示的数值(1～999之间的值),函数内部递归
@@ -65,6 +68,28 @@ namespace UnitConvertor
         return ValuePack{value,ExpHelper<Exa>::E,unit};
     }
 
+    ///将字符串转换为以To为单位表示的数据包,显示给出第二个参数(单位类型)可以提升函数效率
+    template<typename To>
+    static typename std::enable_if<IsRatio<To>::value,ValuePack>::type
+    fromString(const std::string& valueString,UnitEnum unit = EnumNull)
+    {
+        //如果字符串为空则直接返回
+        if(valueString.empty())
+            return ValuePack{0,ExpHelper<One>::E,unit};
+
+        //去除字符串中多余的空格,并且将英文字符转换为小写
+        std::string s = simplified(valueString);
+    }
+
+#ifdef USE_QSTRING
+    ///将字符串转换为以To为单位表示的数据包,显示给出第二个参数(单位类型)可以提升函数效率
+    template<typename To>
+    static typename std::enable_if<IsRatio<To>::value,ValuePack>::type
+    fromString(const QString& valueString,UnitEnum unit = EnumNull)
+    {
+
+    }
+
     ///将字符串自动转换为一个恰当单位表示的数值(1～999之间的值),函数内部递归
     ///如果递归导致ratio溢出或者参数已经是一个恰当的值则返回当前的值和ratio
     template<typename From>
@@ -73,6 +98,7 @@ namespace UnitConvertor
     {
 
     }
+#endif
 };
 
 #endif // UNITCONVERTOR_HPP

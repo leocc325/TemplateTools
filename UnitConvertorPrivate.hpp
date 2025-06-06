@@ -1,8 +1,11 @@
 ﻿#ifndef UNITCONVERTORPRIVATE_H
 #define UNITCONVERTORPRIVATE_H
 
+#include <algorithm>
 #include <ratio>
-#include <QString>
+#include <string>
+#include <vector>
+
 
 namespace UnitConvertor
 {
@@ -46,7 +49,7 @@ namespace UnitConvertor
         EnumExpNum
     };
 
-    static const QString Exps[EnumExpNum] = {"a","f","p","n","u","m","c","d"," ","da","h","k","M","G","T","P","E"};
+    static const char* Exps[EnumExpNum] = {"a","f","p","n","u","m","c","d"," ","da","h","k","M","G","T","P","E"};
 
     enum UnitEnum
     {
@@ -58,7 +61,7 @@ namespace UnitConvertor
         EnumUnitNum
     };
 
-    static const QString Units[EnumUnitNum] = {"null","Hz","V","A","s"};
+    static const char* Units[EnumUnitNum] = {"null","Hz","V","A","s"};
 
     ///根据ratio类型获取数量级字符
     template<typename T> struct ExpHelper{static constexpr ExpEnum  E =  EnumExpNum ;};
@@ -157,6 +160,48 @@ namespace UnitConvertor
     public:
         static constexpr bool value = IsSafeMultiply<R1,R2r>::value;
     };
+
+    //专门处理string的函数
+    namespace
+    {
+        //删除开头、结尾的全部空格,随后删除文本中间的重复空格(保留一个)
+        inline std::string simplified(const std::string& input)
+        {
+
+        }
+
+        //将字符串中的英文转换为小写
+        inline void toLower(std::string& input)
+        {
+
+        }
+
+        inline bool isSpace(char ch)
+        {
+            return ch == ' ';
+        }
+
+        //按空格分割字符串
+        inline std::vector<std::string> split(const std::string& input)
+        {
+            std::vector<std::string> strVec;
+
+            std::string::const_iterator it1 = input.cbegin();
+            std::string::const_iterator it2 = input.cbegin();
+            std::string::const_iterator itEnd = input.cend();
+            while (it1 != itEnd)
+            {
+                //先使用第一个迭代器查找非空格的字符,并且将第二个迭代器移动到相同的位置
+                it2 = std::find_if(it1,itEnd,[=](){return std::isspace(*it1);});
+
+                //随后使用第二个迭代器从第一个迭代器的位置开始查找后续会遇到的第一个空格
+
+                //计算两个迭代器之间的距离,将两个迭代器之间的数据拷贝到新的string中
+
+                //拷贝完毕之后将第一个迭代器位置移动到第二个迭代器位置处,开始下一轮查找
+            }
+        }
+    }
 }
 
 #endif // UNITCONVERTORPRIVATE_H
