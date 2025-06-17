@@ -10,11 +10,9 @@
 #include <queue>
 #include <vector>
 #include <map>
-
+#include <QDebug>
+#include <QThread>
 #include "FunctionTraits.hpp"
-
-using namespace MetaUtility;
-
 /**
  * @brief The ThreadQueue class
  */
@@ -108,46 +106,16 @@ public:
         m_CurrentThread = m_Threads.begin();
     }
 
-    ///同步调用普通函数
-    template<Distribution mode = Ordered,typename Func,typename...Args,
-              typename ReturnType = typename FunctionTraits<std::decay_t<Func>>::ReturnType>
-    std::future<ReturnType> syncTask(Func&& func,Args&&...args)
+    ///启动一个后台任务,返回值是一个与std::packaged_task相关联的future,当传入的函数抛出异常时异常会被保存到future中,因此不会对线程池的while循环造成破坏
+    ///对future调用get()等同于同步执行任务,当前线程会阻塞直到后台任务完成并获取返回值
+    ///不对future调用get()等同于异步执行任务,当前线程会继续向下执行并忽视返回值
+    template<Distribution mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
+    std::future<ReturnType> run(Func func,Args&&...args)
     {
         auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(func,std::forward<Args>(args)...));
         std::future<ReturnType> future = task->get_future();
-
-        add<mode>([task](){
-            (*task)();
-        });
+        add<mode>( [task](){(*task)();} );
         return future;
-    }
-
-    ///同步调用成员函数
-    template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args,
-              typename ReturnType = typename FunctionTraits<std::decay_t<Func>>::ReturnType>
-    std::future<ReturnType> syncTask(Func&& func,Obj* obj,Args&&...args)
-    {
-        auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(func,obj,std::forward<Args>(args)...));
-        std::future<ReturnType> future = task->get_future();
-
-        add<mode>([task](){
-            (*task)();
-        });
-        return future;
-    }
-
-    ///异步调用普通函数
-    template<Distribution mode = Ordered,typename Func,typename...Args>
-    void asyncTask(Func&& func,Args&&...args)
-    {
-        add<mode>(std::bind(func,std::forward<Args>(args)...));
-    }
-
-    ///异步调用成员函数
-    template<Distribution mode = Ordered,typename Func,typename Obj,typename...Args>
-    void asyncTask(Func&& func,Obj* obj,Args&&...args)
-    {
-        add<mode>(std::bind(func,obj,std::forward<Args>(args)...));
     }
 
 private:
