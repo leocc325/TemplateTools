@@ -77,8 +77,16 @@ namespace UnitConvertor
         if(valueString.empty())
             return ValuePack{0,ExpHelper<One>::E,unit};
 
-        //去除字符串中多余的空格,并且将英文字符转换为小写
-        std::string s = simplified(valueString);
+        std::vector<std::string> vec = UC::split(valueString);
+         //正确的字符串应该会被分割成两部分,如果超过两部分也按两部分处理
+        if(vec.size() >= 2)
+        {
+            //将第一部分转换成数值
+            double value = std::stod( vec.at(0));
+
+            //将第二部分分割为指数量级和单位
+
+        }
     }
 
 #ifdef USE_QSTRING

@@ -176,30 +176,39 @@ namespace UnitConvertor
 
         }
 
-        inline bool isSpace(char ch)
-        {
-            return ch == ' ';
-        }
-
         //按空格分割字符串
         inline std::vector<std::string> split(const std::string& input)
         {
             std::vector<std::string> strVec;
 
+            if(input.empty())
+                return strVec;
+
+            std::string::const_iterator inputBeg = input.cbegin();
+            std::string::const_iterator inputEnd = input.cend();
+
             std::string::const_iterator it1 = input.cbegin();
             std::string::const_iterator it2 = input.cbegin();
-            std::string::const_iterator itEnd = input.cend();
-            while (it1 != itEnd)
-            {
-                //先使用第一个迭代器查找非空格的字符,并且将第二个迭代器移动到相同的位置
-                it2 = std::find_if(it1,itEnd,[=](){return std::isspace(*it1);});
 
-                //随后使用第二个迭代器从第一个迭代器的位置开始查找后续会遇到的第一个空格
+            while (it1 != inputEnd)
+            {
+                //先使用第一个迭代器查找非空格的字符,将结果赋值给第一个迭代器
+                it1 = std::find_if(it1,inputEnd,[](char ch){return !std::isspace(ch);});
+                if(it1 == inputEnd)
+                    break;
+
+                //随后从第一个迭代器的位置开始查找后续会遇到的第一个空格,并赋值给第二个迭代器
+                it2 = std::find_if(it1,inputEnd,[](char ch){return std::isspace(ch);});
 
                 //计算两个迭代器之间的距离,将两个迭代器之间的数据拷贝到新的string中
+                std::string s = input.substr(std::distance(inputBeg,it1),std::distance(it1,it2));
+                strVec.push_back(std::move(s));
 
                 //拷贝完毕之后将第一个迭代器位置移动到第二个迭代器位置处,开始下一轮查找
+                it1 = it2;
             }
+
+            return strVec;
         }
     }
 }
