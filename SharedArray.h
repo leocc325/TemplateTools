@@ -1,16 +1,19 @@
 #ifndef SHAREDARRAY_H
 #define SHAREDARRAY_H
 
-#include <QDebug>
 #include <string.h>
 #include <memory>
 #include <vector>
 
+/**
+ *SharedArray是一个隐式共享数据类,通过拷贝、移动、赋值所创建的多个副本共享同一数据
+ *任何可能修改数据的行为都会导致数据分离,创建独立的拷贝
+ *在不使用SharedArray&或者SharedArray*的前提下,这个类是线程安全的
+ */
 template <typename T>
 class SharedArray
 {
 public:
-    // stl compatibility
     typedef size_t size_type;
     typedef const T& const_reference;
     typedef T& reference;
@@ -22,22 +25,6 @@ public:
     typedef const T* const_iterator;
     typedef std::reverse_iterator<iterator> reverse_iterator;
     typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
-
-    inline iterator begin();
-    inline const_iterator begin() const;
-    inline const_iterator cbegin() const;
-    inline const_iterator constBegin() const;
-    inline iterator end();
-    inline const_iterator end() const;
-    inline const_iterator cend() const;
-    inline const_iterator constEnd() const;
-    reverse_iterator rbegin() { return reverse_iterator(end()); }
-    reverse_iterator rend() { return reverse_iterator(begin()); }
-    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
-    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
-    const_reverse_iterator crbegin() const { return const_reverse_iterator(end()); }
-    const_reverse_iterator crend() const { return const_reverse_iterator(begin()); }
-
 
     SharedArray(){}
 
@@ -72,26 +59,92 @@ public:
         size = other.size;
     }
 
+    void* operator new (size_t) = delete ;
+
+    void* operator new[](size_t) = delete;
+
+    inline operator T*() noexcept
+    {
+        detach();
+        return data.get();
+    }
+
     inline operator const T* () const noexcept
     {
-        //这个函数不需要detach,因为返回的是指针的拷贝而不是指针的引用
-        //外部直接修改指针地址不会影响data所指向的地址
         return data.get();
     };
 
-    void printUseCount() const
+    inline T& operator[] (std::size_t index)
     {
-        qDebug()<<"shared count:"<<data.use_count();
+        detach();
+        return (data.get()[index]);
     }
 
-    T& operator[] (std::size_t index)
+    inline const T& operator[] (std::size_t index) const
     {
         return (data.get()[index]);
     }
 
-    const T& operator[] (std::size_t index) const
+    inline iterator begin()
     {
-        return (data.get()[index]);
+        detach();
+        return data.get();
+    }
+
+    inline const_iterator begin() const noexcept
+    {
+        return data.get();
+    }
+
+    inline const_iterator cbegin() const noexcept
+    {
+        return data.get();
+    }
+
+    inline iterator end()
+    {
+        detach();
+        return data.get()+size;
+    }
+
+    inline const_iterator end() const
+    {
+        return data.get()+size;
+    }
+
+    inline const_iterator cend() const
+    {
+        return data.get()+size;
+    }
+
+    inline reverse_iterator rbegin()
+    {
+        return reverse_iterator(end());
+    }
+
+    inline reverse_iterator rend()
+    {
+        return reverse_iterator(begin());
+    }
+
+    inline const_reverse_iterator rbegin() const
+    {
+        return const_reverse_iterator(end());
+    }
+
+    inline const_reverse_iterator rend() const
+    {
+        return const_reverse_iterator(begin());
+    }
+
+    inline const_reverse_iterator crbegin() const
+    {
+        return const_reverse_iterator(end());
+    }
+
+    inline const_reverse_iterator crend() const
+    {
+        return const_reverse_iterator(begin());
     }
 
 private:
