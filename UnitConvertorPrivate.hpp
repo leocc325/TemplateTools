@@ -1,104 +1,100 @@
-﻿#ifndef UNITCONVERTORPRIVATE_H
+#ifndef UNITCONVERTORPRIVATE_H
 #define UNITCONVERTORPRIVATE_H
 
 #include <algorithm>
 #include <ratio>
 #include <string>
+#include <locale>
 #include <vector>
 
+#define USE_QSTRING 0
+
+#if USE_QSTRING
+#include <QStringList>
+#endif
 
 namespace UnitConvertor
 {
     ///这里重新定义了标准库std::ratio别名的原因是增加了部分比例类型
-    using Atto   =   std::atto; //10^-18 阿 a
-    using Femto  =   std::femto;//10^-15飞 f
-    using Pico   =   std::pico;//10^-12 皮 p
-    using Nano   =   std::nano;//10^-9 纳 n
-    using Micro  =   std::micro;//10^-6 微 μ
-    using Milli  =   std::milli;//10^-3 毫 m
-    using Centi  =   std::centi;//10^-2 厘 c
-    using Deci   =   std::deci;//10^-1 分 d
-    using One    =   std::ratio<1,1>;//1 个
-    using Deca   =   std::deca;//10^1 十 da
-    using Hecto  =   std::hecto;//10^2 百 h
-    using Kilo   =   std::kilo;//10^3 千 k
-    using Mega   =   std::mega;//10^6兆M
-    using Giga   =   std::giga;//10^9吉G
-    using Tera   =   std::tera;//10^12太T
-    using Peta   =   std::peta;//10^15拍P
-    using Exa    =   std::exa;//10^18艾E
+    using Atto   =   std::atto;       //10^-18 阿  a
+    using Femto  =   std::femto;      //10^-15 飞  f
+    using Pico   =   std::pico;       //10^-12 皮  p
+    using Nano   =   std::nano;       //10^-9  纳  n
+    using Micro  =   std::micro;      //10^-6  微  μ
+    using Milli  =   std::milli;      //10^-3  毫  m
+    using Centi  =   std::centi;      //10^-2  厘  c
+    using Deci   =   std::deci;       //10^-1  分  d
+    using One    =   std::ratio<1>;   //1      个
+    using Deca   =   std::deca;       //10^1   十  da
+    using Hecto  =   std::hecto;      //10^2   百  h
+    using Kilo   =   std::kilo;       //10^3   千  k
+    using Mega   =   std::mega;       //10^6   兆  M
+    using Giga   =   std::giga;       //10^9   吉  G
+    using Tera   =   std::tera;       //10^12  太  T
+    using Peta   =   std::peta;       //10^15  拍  P
+    using Exa    =   std::exa;        //10^18  艾  E
 
-    enum ExpEnum {
-        EnumAtto,
-        EnumFemto,
-        EnumPico,
-        EnumNano,
-        EnumMicro,
-        EnumMilli,
-        EnumCenti,
-        EnumDeci,
-        EnumOne,
-        EnumDeca,
-        EnumHecto,
-        EnumKilo,
-        EnumMega,
-        EnumGiga,
-        EnumTera,
-        EnumPeta,
-        EnumExa,
-        EnumExpNum
-    };
+    enum ExpEnum {EnumAtto,EnumFemto,EnumPico,EnumNano,EnumMicro,EnumMilli,EnumCenti,EnumDeci,EnumOne,
+                  EnumDeca,EnumHecto,EnumKilo,EnumMega,EnumGiga,EnumTera,EnumPeta,EnumExa,EnumExpNum};
 
-    static const char* Exps[EnumExpNum] = {"a","f","p","n","u","m","c","d"," ","da","h","k","M","G","T","P","E"};
+    static const std::string Exps[EnumExpNum] = {"a","f","p","n","u","m","c","d"," ","da","h","k","M","G","T","P","E"};
 
-    enum UnitEnum
-    {
-        EnumNull,
-        EnumFrequency,
-        EnumVoltage,
-        EnumCurrent,
-        EnumTime,
-        EnumUnitNum
-    };
+    enum UnitEnum {EnumNull,EnumFrequency,EnumVoltage,EnumCurrent,EnumTime,EnumUnitNum};
 
-    static const char* Units[EnumUnitNum] = {"null","Hz","V","A","s"};
+    static const std::string Units[EnumUnitNum] = {" ","Hz","V","A","s"};
 
     ///根据ratio类型获取数量级字符
-    template<typename T> struct ExpHelper{static constexpr ExpEnum  E =  EnumExpNum ;};
+    template<typename T> struct ExpToEnum{static constexpr ExpEnum  E =  EnumExpNum ;};
 
-    template<> struct ExpHelper<Atto>{static constexpr ExpEnum  E =  EnumAtto ;};
+    template<> struct ExpToEnum<Atto>{static constexpr ExpEnum  E =  EnumAtto ;};
 
-    template<> struct ExpHelper<Femto>{static constexpr ExpEnum  E =  EnumFemto ;};
+    template<> struct ExpToEnum<Femto>{static constexpr ExpEnum  E =  EnumFemto ;};
 
-    template<> struct ExpHelper<Pico>{static constexpr ExpEnum  E =  EnumPico ;};
+    template<> struct ExpToEnum<Pico>{static constexpr ExpEnum  E =  EnumPico ;};
 
-    template<> struct ExpHelper<Nano>{static constexpr ExpEnum  E =  EnumNano ;};
+    template<> struct ExpToEnum<Nano>{static constexpr ExpEnum  E =  EnumNano ;};
 
-    template<> struct ExpHelper<Micro>{static constexpr ExpEnum  E =  EnumMicro ;};
+    template<> struct ExpToEnum<Micro>{static constexpr ExpEnum  E =  EnumMicro ;};
 
-    template<> struct ExpHelper<Milli>{static constexpr ExpEnum  E =  EnumMilli ;};
+    template<> struct ExpToEnum<Milli>{static constexpr ExpEnum  E =  EnumMilli ;};
 
-    template<> struct ExpHelper<Centi>{static constexpr ExpEnum  E =  EnumCenti ;};
+    template<> struct ExpToEnum<Centi>{static constexpr ExpEnum  E =  EnumCenti ;};
 
-    template<> struct ExpHelper<Deci>{static constexpr ExpEnum  E =  EnumDeci ;};
+    template<> struct ExpToEnum<Deci>{static constexpr ExpEnum  E =  EnumDeci ;};
 
-    template<> struct ExpHelper<One>{static constexpr ExpEnum  E =  EnumOne ;};
+    template<> struct ExpToEnum<One>{static constexpr ExpEnum  E =  EnumOne ;};
 
-    template<> struct ExpHelper<Deca>{static constexpr ExpEnum  E =  EnumDeca ;};
+    template<> struct ExpToEnum<Deca>{static constexpr ExpEnum  E =  EnumDeca ;};
 
-    template<> struct ExpHelper<Hecto>{static constexpr ExpEnum  E =  EnumHecto ;};
+    template<> struct ExpToEnum<Hecto>{static constexpr ExpEnum  E =  EnumHecto ;};
 
-    template<> struct ExpHelper<Kilo>{static constexpr ExpEnum  E =  EnumKilo ;};
+    template<> struct ExpToEnum<Kilo>{static constexpr ExpEnum  E =  EnumKilo ;};
 
-    template<> struct ExpHelper<Mega>{static constexpr ExpEnum  E =  EnumMega ;};
+    template<> struct ExpToEnum<Mega>{static constexpr ExpEnum  E =  EnumMega ;};
 
-    template<> struct ExpHelper<Giga>{static constexpr ExpEnum  E =  EnumGiga ;};
+    template<> struct ExpToEnum<Giga>{static constexpr ExpEnum  E =  EnumGiga ;};
 
-    template<> struct ExpHelper<Tera>{static constexpr ExpEnum  E =  EnumTera ;};
+    template<> struct ExpToEnum<Tera>{static constexpr ExpEnum  E =  EnumTera ;};
 
-    template<> struct ExpHelper<Peta>{static constexpr ExpEnum  E =  EnumPeta ;};
+    template<> struct ExpToEnum<Peta>{static constexpr ExpEnum  E =  EnumPeta ;};
 
-    template<> struct ExpHelper<Exa>{static constexpr ExpEnum  E =  EnumExa ;};
+    template<> struct ExpToEnum<Exa>{static constexpr ExpEnum  E =  EnumExa ;};
+
+    template<ExpEnum> struct ExpFromEnum{using type = One;};
+
+    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
+
+//    template<> struct ExpFromEnum<EnumAtto>{using type = Atto;};
 
     ///判断给定类型是否是std::ratio类型
     template<typename T>
@@ -161,55 +157,123 @@ namespace UnitConvertor
         static constexpr bool value = IsSafeMultiply<R1,R2r>::value;
     };
 
-    //专门处理string的函数
-    namespace
+    ///专门处理string的函数
+
+    struct ValuePack
     {
-        //删除开头、结尾的全部空格,随后删除文本中间的重复空格(保留一个)
-        inline std::string simplified(const std::string& input)
+        operator double () {
+            return value;
+        };
+
+        operator std::string() {
+            return std::to_string(value)+" "+std::string(Exps[exp])+std::string(Units[unit]);
+        };
+
+#if USE_QSTRING
+        operator QString() {
+            return QString("%1 %2%3").arg(value).arg(Exps[exp]).arg(Units[unit]);
+        };
+#endif
+
+        double value  = 0;
+        ExpEnum exp   = EnumOne;
+        UnitEnum unit = EnumNull;
+    };
+
+    ///***findExp和findUnit存在缺陷,只要两端数量级和单位正确,就算中间夹杂了额外的字符,也会正确解析。而且如果单位A是单位B的子集,那么有可能错误的将B解析成A。***
+
+    ///查找数量级
+    inline ExpEnum findExp(const std::string& input)
+    {
+        if(input.empty())
+            return EnumOne;
+
+        for(int i = 0; i < EnumExpNum; i++)
         {
-
-        }
-
-        //将字符串中的英文转换为小写
-        inline void toLower(std::string& input)
-        {
-
-        }
-
-        //按空格分割字符串
-        inline std::vector<std::string> split(const std::string& input)
-        {
-            std::vector<std::string> strVec;
-
-            if(input.empty())
-                return strVec;
-
-            std::string::const_iterator inputBeg = input.cbegin();
-            std::string::const_iterator inputEnd = input.cend();
-
-            std::string::const_iterator it1 = input.cbegin();
-            std::string::const_iterator it2 = input.cbegin();
-
-            while (it1 != inputEnd)
+            if(input.size() >= Exps[i].size())
             {
-                //先使用第一个迭代器查找非空格的字符,将结果赋值给第一个迭代器
-                it1 = std::find_if(it1,inputEnd,[](char ch){return !std::isspace(ch);});
-                if(it1 == inputEnd)
-                    break;
-
-                //随后从第一个迭代器的位置开始查找后续会遇到的第一个空格,并赋值给第二个迭代器
-                it2 = std::find_if(it1,inputEnd,[](char ch){return std::isspace(ch);});
-
-                //计算两个迭代器之间的距离,将两个迭代器之间的数据拷贝到新的string中
-                std::string s = input.substr(std::distance(inputBeg,it1),std::distance(it1,it2));
-                strVec.push_back(std::move(s));
-
-                //拷贝完毕之后将第一个迭代器位置移动到第二个迭代器位置处,开始下一轮查找
-                it1 = it2;
+                //只对开头n个字节做比较
+                if(input.compare(0,Exps[i].size(),Exps[i]) == 0)
+                    return ExpEnum(i);
             }
-
-            return strVec;
         }
+        //如果没有查询到匹配的数量级则认为数量级为1
+        return EnumOne;
+    }
+
+    inline UnitEnum findUnit(const std::string& input)
+    {
+        if(input.empty())
+            return EnumNull;
+
+        for(int i = 0; i < EnumUnitNum; i++)
+        {
+            if(input.size() >= Units[i].size())
+            {
+                //只对最后n个字节做比较
+                std::size_t pos = input.size()-Units[i].size();
+                std::size_t len = Units[i].size();
+                if(input.compare(pos,len,Units[i]) == 0)
+                    return UnitEnum(i);
+            }
+        }
+        //如果没有查询到匹配的单位则认为传入的字符串是不带单位的
+        return EnumNull;
+    }
+
+    ///将字符串中的英文转换为小写
+    inline void toLower(std::string& input)
+    {
+        if(input.empty())
+            return;
+
+        std::locale loc = std::locale::classic();
+        std::use_facet<std::ctype<char>>(loc).tolower(&input[0],&input[0]+input.size());
+    }
+
+    ///将字符串中的英文转换为大写
+    inline void toUpper(std::string& input)
+    {
+        if(input.empty())
+            return;
+
+        std::locale loc = std::locale::classic();
+        std::use_facet<std::ctype<char>>(loc).toupper(&input[0],&input[0]+input.size());
+    }
+
+    ///按空格分割字符串
+    inline std::vector<std::string> split(const std::string& input)
+    {
+        std::vector<std::string> strVec;
+
+        if(input.empty())
+            return strVec;
+
+        std::string::const_iterator inputBeg = input.cbegin();
+        std::string::const_iterator inputEnd = input.cend();
+
+        std::string::const_iterator it1 = input.cbegin();
+        std::string::const_iterator it2 = input.cbegin();
+
+        while (it1 != inputEnd)
+        {
+            //先使用第一个迭代器查找非空格的字符,将结果赋值给第一个迭代器
+            it1 = std::find_if(it1,inputEnd,[](char ch){return !std::isspace(ch);});
+            if(it1 == inputEnd)
+                break;
+
+            //随后从第一个迭代器的位置开始查找后续会遇到的第一个空格,并赋值给第二个迭代器
+            it2 = std::find_if(it1,inputEnd,[](char ch){return std::isspace(ch);});
+
+            //计算两个迭代器之间的距离,将两个迭代器之间的数据拷贝到新的string中
+            std::string s = input.substr(std::distance(inputBeg,it1),std::distance(it1,it2));
+            strVec.push_back(std::move(s));
+
+            //拷贝完毕之后将第一个迭代器位置移动到第二个迭代器位置处,开始下一轮查找
+            it1 = it2;
+        }
+
+        return strVec;
     }
 }
 
