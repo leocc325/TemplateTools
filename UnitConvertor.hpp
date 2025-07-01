@@ -1,4 +1,4 @@
-#ifndef UNITCONVERTOR_HPP
+﻿#ifndef UNITCONVERTOR_HPP
 #define UNITCONVERTOR_HPP
 
 #include "UnitConvertorPrivate.hpp"
@@ -64,7 +64,7 @@ namespace UnitConvertor
             ExpEnum E = UC::findExp(vec.at(1));
             UnitEnum U = UC::findUnit(vec.at(1));
 
-            using From = ExpFromEnum<E>::type;
+            //using From = ExpFromEnum<E>::type;
 
             return ValuePack{V,E,U};
         }
