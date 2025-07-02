@@ -1,4 +1,4 @@
-﻿#ifndef FUNCTIONTRAITS_H
+#ifndef FUNCTIONTRAITS_H
 #define FUNCTIONTRAITS_H
 
 #include <functional>
@@ -14,6 +14,7 @@ namespace MetaUtility {
     struct FunctionTraits<RT(Args...)>
     {
         enum {Arity = sizeof... (Args)};
+        using Class = std::nullptr_t;
         using ReturnType = RT;
         using FunctionType = RT(Args...);
         using StlFunction = std::function<FunctionType>;
@@ -35,27 +36,45 @@ namespace MetaUtility {
 
     ///std::function
     template<typename RT,typename...Args>
-    struct FunctionTraits<std::function<RT(Args...)>>:FunctionTraits<RT(Args...)>{};
+    struct FunctionTraits<std::function<RT(Args...)>>:FunctionTraits<RT(Args...)>
+    {
+        using Class = std::function<RT(Args...)>;
+    };
 
     ///普通成员函数
     template<typename RT,typename ClassType,typename...Args>
-    struct FunctionTraits<RT(ClassType::*)(Args...)> :FunctionTraits<RT(Args...)>{};
+    struct FunctionTraits<RT(ClassType::*)(Args...)> :FunctionTraits<RT(Args...)>
+    {
+        using Class = ClassType;
+    };
 
     ///const成员函数
     template<typename RT,typename ClassType,typename...Args>
-    struct FunctionTraits<RT(ClassType::*)(Args...) const> :FunctionTraits<RT(Args...)>{};
+    struct FunctionTraits<RT(ClassType::*)(Args...) const> :FunctionTraits<RT(Args...)>
+    {
+        using Class = ClassType;
+    };
 
     ///volatile成员函数
     template<typename RT,typename ClassType,typename...Args>
-    struct FunctionTraits<RT(ClassType::*)(Args...) volatile> :FunctionTraits<RT(Args...)>{};
+    struct FunctionTraits<RT(ClassType::*)(Args...) volatile> :FunctionTraits<RT(Args...)>
+    {
+        using Class = ClassType;
+    };
 
     ///const volatile成员函数
     template<typename RT,typename ClassType,typename...Args>
-    struct FunctionTraits<RT(ClassType::*)(Args...) const volatile> :FunctionTraits<RT(Args...)>{};
+    struct FunctionTraits<RT(ClassType::*)(Args...) const volatile> :FunctionTraits<RT(Args...)>
+    {
+        using Class = ClassType;
+    };
 
     ///函数对象
     template<typename Callable>
-    struct FunctionTraits:FunctionTraits<decltype (&Callable::operator())>{};
+    struct FunctionTraits:FunctionTraits<decltype (&Callable::operator())>
+    {
+        using Class = Callable;
+    };
 
 }
 
