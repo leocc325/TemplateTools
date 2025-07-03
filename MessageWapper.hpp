@@ -32,13 +32,21 @@ struct MessageReturnType<msg>{using type = func;};
 
 class MessageWapper
 {
+#if 0
+    //直接传递函数指针类型作为模板参数会导致模板膨胀
+    //两个返回值一样、参数数量类型一样的的函数指针也会实例化两套模板
+    //所以推荐使用以返回值
     template<typename Func>
     struct Manager
     {
         using Ret = typename FunctionTraits<Func>::ReturnType;
         using ArgsTuple = typename FunctionTraits<Func>::BareTupleType;
         static constexpr unsigned arity = FunctionTraits<Func>::Arity;
-
+#else
+    template<typename Ret,typename ArgsTuple,unsigned Arity = std::tuple_size<ArgsTuple>::value>
+    struct Manager
+    {
+#endif
         static void setMsgArgs(void* input,void* argsTuple)
         {
             //需要在外面确保两个指针的类型一致,否则会UB
@@ -48,13 +56,13 @@ class MessageWapper
 
         static void setStringArgs(const QStringList& argsList,void* argsTuple)
         {
-            if(arity != argsList.count()){
-                qDebug()<<QString("error:argments number mismatch,%1/%2").arg(arity).arg(argsList.count());
+            if(Arity != argsList.count()){
+                qDebug()<<QString("error:argments number mismatch,%1/%2").arg(Arity).arg(argsList.count());
                 return;
             }
 
             resetTuple(argsTuple);
-            TupleHelper<arity - 1, ArgsTuple>::set(*static_cast<ArgsTuple*>(argsTuple), argsList);
+            TupleHelper<Arity - 1, ArgsTuple>::set(*static_cast<ArgsTuple*>(argsTuple), argsList);
         }
 
         static void deleteMembers(void* args,void* ret)
@@ -121,6 +129,20 @@ class MessageWapper
             }
         }
 
+        template<typename T = Ret>
+        static typename std::enable_if<!std::is_void<T>::value>::type
+        result(void* from,void* to)
+        {
+            *static_cast<Ret*>(to) = *static_cast<Ret*>(from);
+        }
+
+        template<typename T = Ret>
+        static typename std::enable_if<std::is_void<T>::value>::type
+        result(void* from,void* to)
+        {
+
+        }
+
         static void resetTuple(void* tpl)
         {
             if(tpl == nullptr)
@@ -144,6 +166,7 @@ class MessageWapper
     void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
     void (*initHelper)(void*&,const std::type_info*&,void*&,const std::type_info*&) = nullptr;
     void (*deleteHelper)(void*,void*) = nullptr;
+    void (*resultHelper)(void*,void*) = nullptr;
 
 public:
     MessageWapper() = delete ;
@@ -160,10 +183,14 @@ public:
              typename Enable = typename std::enable_if<std::is_same<Obj,typename FunctionTraits<Func>::Class>::value>::type>
     MessageWapper(Func func,Obj* obj = nullptr)
     {
-        msgArgsHelper = &Manager<Func>::setMsgArgs;
-        scpiArgsHelper = &Manager<Func>::setStringArgs;
-        deleteHelper = &Manager<Func>::deleteMembers;
-        initHelper = &Manager<Func>::initMembers;
+        using Ret = typename FunctionTraits<Func>::ReturnType;
+        using ArgsTuple = typename FunctionTraits<Func>::BareTupleType;
+
+        msgArgsHelper = &Manager<Ret,ArgsTuple>::setMsgArgs;
+        scpiArgsHelper = &Manager<Ret,ArgsTuple>::setStringArgs;
+        deleteHelper = &Manager<Ret,ArgsTuple>::deleteMembers;
+        initHelper = &Manager<Ret,ArgsTuple>::initMembers;
+        resultHelper = &Manager<Ret,ArgsTuple>::result;
 
         initHelper(argsTuple,argTupleInfo,result,resultInfo);
 
@@ -221,6 +248,11 @@ public:
 
     template<std::size_t Index,typename RT = typename MessageReturnType<Index>::type>
     typename std::enable_if<std::is_void<RT>::value>::type getResult(){}
+
+    void getResult(void* ptr)
+    {
+        resultHelper(result,ptr);
+    }
 
     QString getResultString() const noexcept
     {
@@ -325,101 +357,3 @@ private:
 
     QString resultString;
 };
-
-//临时定义的模板和宏，用于单元测试
-#define MSG_FUNC1 1
-#define MSG_FUNC2 2
-#define MSG_FUNC3 3
-#define MSG_FUNC4 4
-#define MSG_FUNC5 5
-#define MSG_FUNC6 6
-#define MSG_FUNC7 7
-
-template <std::size_t N>
-struct MessageRT{using type = void;};
-
-template <>
-struct MessageRT<MSG_FUNC3>{using type = double;};
-
-template <>
-struct MessageRT<MSG_FUNC4>{using type = int;};
-
-template <>
-struct MessageRT<MSG_FUNC5>{using type = int;};
-
-class TestClass
-{
-public:
-    TestClass(){qDebug()<<" new TestClass ";}
-    ~TestClass(){qDebug()<<" delete TestClass ";}
-    void func1(){qDebug()<<"TestClass::func1: ";}
-    void func2(int a,double b){qDebug()<<"TestClass::func2: "<<a<<b;}
-    double func3(double a){qDebug()<<"TestClass::func3: "<<a;return a;}
-    static int func4(TestClass& obj){qDebug()<<"TestClass::func4: ";return obj.value;}
-    int operator () (int a, int b){qDebug()<<"TestClass::operator()(int,int): "<<a<<b;return a+b;}
-
-    friend std::ostream& operator << (std::ostream& os,const TestClass& obj)
-    {
-        return os;
-    }
-
-    friend std::istream& operator >> (std::istream& is,TestClass& obj)
-    {
-        return is;
-    }
-
-private:
-    int value = 30;
-};
-
-inline void testFunc(int a,int b,double c)
-{
-    qDebug()<<"testFunc: "<<a<<b<<c;
-}
-
-inline TestClass* testFunc2(int a,TestClass*)
-{
-    qDebug()<<"testFunc: "<<a;
-}
-
-inline void testUnit()
-{
-    TestClass* t = MemoryPool::GlobalPool->allocate<TestClass>();
-    MemoryPool::GlobalPool->deallocate(t);
-
-    TestClass* obj = new TestClass();
-
-    //测试MessageWapper构造函数的默认参数
-    //MessageWapper msg_001(testFunc,obj);//类型推导错误，编译器报错
-    //MessageWapper msg_002(&TestClass::func1,obj);//类型推导正确,编译通过
-    //MessageWapper msg_003(&TestClass::func1);//类型推导正确,编译通过
-
-    MessageWapper msg_004(testFunc);
-    //msg_004.callByMsg(10,20);//传入错误数量的参数,抛出异常
-    //msg_004.callByMsg(10,20.5,30.5);//传入类型错误的参数,抛出异常
-    msg_004.callByMsg(10,20,20.5);//传入正确的参数,输出testFunc:  10 20 20.5
-    int a = 10;
-    int& b = a;
-    msg_004.callByMsg(a,b,20.5);//传入正确的参数,输出testFunc:  10 20 20.5
-
-    {
-      MessageWapper ms(testFunc2);
-    }
-    {
-      MessageWapper ms(testFunc2);
-    }
-    MessageWapper msg_005(testFunc2);
-
-
-    msg_005.callByMsg(10,obj);
-    msg_005.callByMsg(10,obj);
-    msg_005.callByMsg(10,obj);
-    msg_005.callByMsg(10,obj);
-
-    //测试返回值为void和非void的函数
-    //测试普通函数、成员函数、static函数、lambda、std::function、callable
-    //测试MSG调用变量传参
-    //测试SCPI调用字符串传参
-}
-
-#endif // MESSAGEWAPPER_H
