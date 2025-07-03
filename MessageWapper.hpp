@@ -133,7 +133,8 @@ class MessageWapper
         static typename std::enable_if<!std::is_void<T>::value>::type
         result(void* from,void* to)
         {
-            *static_cast<Ret*>(to) = *static_cast<Ret*>(from);
+            if(from != nullptr && to != nullptr)
+                *static_cast<Ret*>(to) = *static_cast<Ret*>(from);
         }
 
         template<typename T = Ret>
