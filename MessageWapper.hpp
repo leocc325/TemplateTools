@@ -10,76 +10,13 @@
 #include <QDebug>
 #include <QStringList>
 
+#define USE_MEMPOOL 1
+
+#if USE_MEMPOOL
+#include "TemplateTools/MemoryPool.hpp"
+#endif
+
 using namespace MetaUtility;
-
-/**
- * @brief The MemoryPool class : 专门为消息包装器定制的内存池
- * 这是一个简陋的内存池,是为了代替::operator new分配地址,确保给生命周期伴随整个程序运行的小对象分配的内存是连续的,减少内存散布
- * 内存池会返回一个地址,为了避免内存频繁分配和回收,依然需要在外部配合placement new使用
- */
-class MemoryPool
-{
-public:
-    MemoryPool(std::size_t size = 1024)
-    {
-        length = size;
-        allocateNewBlock();
-    }
-
-    ~MemoryPool()
-    {
-        std::vector<char*>::iterator it = poolVec.begin();
-        while (it != poolVec.end())
-        {
-            ::operator delete(*it);
-            ++it;
-        }
-    }
-
-    template<typename T,typename...Args>
-    T* allocate(Args&&...args)
-    {
-        if(sizeof(T) > length)
-            return nullptr;
-
-        if(offset + sizeof (T) > length)
-            allocateNewBlock();
-
-        if(pool != nullptr)
-        {
-            void* address = pool + offset;
-            offset += sizeof (T);
-            return ::new (address) T(std::forward<Args>(args)...);
-        }
-    }
-
-    template<typename T>
-    void deallocate(T* ptr) const noexcept
-    {
-        if(ptr)
-        {
-            ptr->~T();
-        }
-    }
-
-private:
-    void allocateNewBlock()
-    {
-        char* buf = static_cast<char*>(::operator new(length));
-        if(buf)
-        {
-            pool = buf;
-            offset = 0;
-            poolVec.push_back(buf);
-        }
-    }
-
-private:
-    std::vector<char*> poolVec;
-    char* pool = nullptr;
-    std::size_t length = 0;
-    std::size_t offset = 0;
-};
 
 //使用消息id获取返回值类型
 template <std::size_t N>
@@ -125,7 +62,7 @@ class MessageWapper
             deleter(static_cast<ArgsTuple*>(args));
             deleter(static_cast<Ret*>(ret));
         }
-
+        //有内存池的情况下可以将这里改为内存池分配空间
         static void initMembers(void*& args,const std::type_info*& argsInfo,void*& ret,const std::type_info*& retInfo)
         {
             init<ArgsTuple>(args,argsInfo);
@@ -137,8 +74,12 @@ class MessageWapper
         {
             if(ptr != nullptr)
             {
+#if USE_MEMPOOL
+                MemoryPool::GlobalPool->deallocate(ptr);
+#else
                 ptr->~T();
                 ::operator delete(ptr);
+#endif
                 ptr = nullptr;
             }
         }
@@ -148,7 +89,11 @@ class MessageWapper
         {
             if(ptr != nullptr)
             {
+#if USE_MEMPOOL
+                MemoryPool::GlobalPool->deallocate(ptr);
+#else
                 ::operator delete(ptr);
+#endif
                 ptr = nullptr;
             }
         }
@@ -158,7 +103,11 @@ class MessageWapper
         {
             if(ptr == nullptr)
             {
-                ptr =  static_cast<T*>(::operator new(sizeof (T)));
+#if USE_MEMPOOL
+                ptr = MemoryPool::GlobalPool->allocate<T>();
+#else
+                ptr = static_cast<T*>(::operator new(sizeof (T)));
+#endif
                 info = &typeid(T);
             }
         }
@@ -176,7 +125,11 @@ class MessageWapper
         {
             if(tpl == nullptr)
             {
+#if USE_MEMPOOL
+                tpl = MemoryPool::GlobalPool->allocate<ArgsTuple>();
+#else
                 tpl = ::operator new(sizeof (ArgsTuple));
+#endif
             }
             else
             {
@@ -230,7 +183,6 @@ public:
         using Tuple = typename std::tuple<typename std::remove_cv_t<typename std::remove_reference_t<Args>>...>;
         if(typeid (Tuple) != *argTupleInfo)
         {
-            qDebug()<<typeid (Tuple).name()<<argTupleInfo->name();
             throw std::invalid_argument("Argument type or number mismatch");
         }
         Tuple tpl = std::make_tuple(std::forward<Args>(args)...);
@@ -395,26 +347,46 @@ struct MessageRT<MSG_FUNC4>{using type = int;};
 template <>
 struct MessageRT<MSG_FUNC5>{using type = int;};
 
-inline void testFunc(int a,int b,double c)
-{
-    qDebug()<<"testFunc: "<<a<<b<<c;
-}
-
 class TestClass
 {
 public:
+    TestClass(){qDebug()<<" new TestClass ";}
+    ~TestClass(){qDebug()<<" delete TestClass ";}
     void func1(){qDebug()<<"TestClass::func1: ";}
     void func2(int a,double b){qDebug()<<"TestClass::func2: "<<a<<b;}
     double func3(double a){qDebug()<<"TestClass::func3: "<<a;return a;}
     static int func4(TestClass& obj){qDebug()<<"TestClass::func4: ";return obj.value;}
     int operator () (int a, int b){qDebug()<<"TestClass::operator()(int,int): "<<a<<b;return a+b;}
+
+    friend std::ostream& operator << (std::ostream& os,const TestClass& obj)
+    {
+        return os;
+    }
+
+    friend std::istream& operator >> (std::istream& is,TestClass& obj)
+    {
+        return is;
+    }
+
 private:
     int value = 30;
 };
 
+inline void testFunc(int a,int b,double c)
+{
+    qDebug()<<"testFunc: "<<a<<b<<c;
+}
+
+inline TestClass* testFunc2(int a,TestClass*)
+{
+    qDebug()<<"testFunc: "<<a;
+}
+
 inline void testUnit()
 {
-    qDebug()<<sizeof (std::type_info) ;
+    TestClass* t = MemoryPool::GlobalPool->allocate<TestClass>();
+    MemoryPool::GlobalPool->deallocate(t);
+
     TestClass* obj = new TestClass();
 
     //测试MessageWapper构造函数的默认参数
@@ -429,6 +401,20 @@ inline void testUnit()
     int a = 10;
     int& b = a;
     msg_004.callByMsg(a,b,20.5);//传入正确的参数,输出testFunc:  10 20 20.5
+
+    {
+      MessageWapper ms(testFunc2);
+    }
+    {
+      MessageWapper ms(testFunc2);
+    }
+    MessageWapper msg_005(testFunc2);
+
+
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
 
     //测试返回值为void和非void的函数
     //测试普通函数、成员函数、static函数、lambda、std::function、callable
