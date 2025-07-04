@@ -35,7 +35,7 @@ class MessageWapper
 #if 0
     //直接传递函数指针类型作为模板参数会导致模板膨胀
     //两个返回值一样、参数数量类型一样的的函数指针也会实例化两套模板
-    //所以推荐使用以返回值
+    //所以推荐使用以返回值、函数参数元组作为模板参数
     template<typename Func>
     struct Manager
     {
@@ -47,11 +47,11 @@ class MessageWapper
     struct Manager
     {
 #endif
-        static void setMsgArgs(void* input,void* argsTuple)
+        static void setMsgArgs(void* from,void* to)
         {
             //需要在外面确保两个指针的类型一致,否则会UB
-            resetTuple(argsTuple);
-            *static_cast<ArgsTuple*>(argsTuple) = *static_cast<ArgsTuple*>(input);
+            resetTuple(to);
+            *static_cast<ArgsTuple*>(to) = *static_cast<ArgsTuple*>(from);
         }
 
         static void setStringArgs(const QStringList& argsList,void* argsTuple)
@@ -139,12 +139,12 @@ class MessageWapper
 
         template<typename T = Ret>
         static typename std::enable_if<std::is_void<T>::value>::type
-        result(void* from,void* to)
+        result(void* ,void* )
         {
 
         }
 
-        static void resetTuple(void* tpl)
+        static void resetTuple(void*& tpl)
         {
             if(tpl == nullptr)
             {
@@ -163,18 +163,56 @@ class MessageWapper
         }
     };
 
-    void (*msgArgsHelper)(void*,void*) = nullptr;
-    void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
-    void (*initHelper)(void*&,const std::type_info*&,void*&,const std::type_info*&) = nullptr;
-    void (*deleteHelper)(void*,void*) = nullptr;
-    void (*resultHelper)(void*,void*) = nullptr;
-
 public:
     MessageWapper() = delete ;
 
-    MessageWapper(const MessageWapper&) = delete ;
+    MessageWapper(const MessageWapper& other)
+    {
+        this->functor = other.functor;
+        this->initHelper = other.initHelper;
+        this->msgArgsHelper = other.msgArgsHelper;
+        this->scpiArgsHelper = other.scpiArgsHelper;
+        this->deleteHelper = other.deleteHelper;
+        this->resultHelper = other.resultHelper;
+        this->resultString = other.resultString;
 
-    MessageWapper(MessageWapper&&) = delete ;
+        //指针拷贝完成之后对参数指针初始化
+        this->initHelper(argsTuple,argTupleInfo,result,resultInfo);
+    }
+
+    MessageWapper(MessageWapper&& other) noexcept
+    {
+        this->functor = std::move(other.functor);
+
+        this->initHelper = other.initHelper;
+        other.initHelper = nullptr;
+
+        this->msgArgsHelper = other.msgArgsHelper;
+        other.msgArgsHelper = nullptr;
+
+        this->scpiArgsHelper = other.scpiArgsHelper;
+        other.scpiArgsHelper = nullptr;
+
+        this->deleteHelper = other.deleteHelper;
+        other.deleteHelper = nullptr;
+
+        this->resultHelper = other.resultHelper;
+        other.resultHelper = nullptr;
+
+        this->argsTuple = other.argsTuple;
+        other.argsTuple = nullptr;
+
+        this->result = other.result;
+        other.result = nullptr;
+
+        this->argTupleInfo = other.argTupleInfo;
+        other.argTupleInfo = nullptr;
+
+        this->resultInfo = other.resultInfo;
+        other.resultInfo = nullptr;
+
+        this->resultString = std::move(other.resultString);
+    }
 
     MessageWapper& operator = (const MessageWapper&) = delete ;
 
@@ -195,14 +233,30 @@ public:
 
         initHelper(argsTuple,argTupleInfo,result,resultInfo);
 
-        functor = [this,func,obj](){
-            callHelper(func,obj);
+        //这里不能将this捕获到lambda中,当lambda捕获类的成员变量时,它实际上捕获的是this指针。
+        //拷贝对象时,lambda中的this指针仍然指向原对象A导致新对象B执行函数时错误地访问 A 的数据。
+        //例如MessageWapper A,然后通过拷贝构造函数创建B和C,此时B和C的functor中捕获的任然是A的this指针
+        //B和C中成员变量无论如何变化,functor的执行结果都和A的执行结果一样,因为functor持有的MessageWapper*是A
+        //所以需要将其更改成调用时传入MessageWapper指针
+        functor = [func,obj](MessageWapper* ptr){
+            ptr->callHelper(func,obj);
         };
     }
 
     ~MessageWapper()
     {
         deleteHelper(argsTuple,result);
+    }
+
+    void exec()
+    {
+        if(argsTuple == nullptr)
+        {
+            qDebug()<<"no parameter has been setted,excute failed";
+            return;
+        }
+
+        functor(this);
     }
 
     template<typename...Args>
@@ -226,14 +280,14 @@ public:
     void callByMsg(Args&&...args)
     {
         setMsgArgs(std::forward<Args>(args)...);
-        functor();
+        functor(this);
     }
 
     //这里不能使用重载来调用call，因为call在使用模板传参的时候可能会出现单个参数且参数类型是QStringList的时候，这种情况下会导致参数转发错误，所以需要给这两个函数改名
     void callByScpi(const QStringList& strList)
     {
         setScpiArgs(strList);
-        functor();
+        functor(this);
     }
 
     template<std::size_t Index,typename RT = typename MessageReturnType<Index>::type>
@@ -348,7 +402,13 @@ private:
     }
 
 private:
-    std::function<void()> functor;
+    std::function<void(MessageWapper*)> functor;
+
+    void (*msgArgsHelper)(void*,void*) = nullptr;
+    void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
+    void (*initHelper)(void*&,const std::type_info*&,void*&,const std::type_info*&) = nullptr;
+    void (*deleteHelper)(void*,void*) = nullptr;
+    void (*resultHelper)(void*,void*) = nullptr;
 
     void* argsTuple = nullptr;
     const std::type_info* argTupleInfo = nullptr;
@@ -358,3 +418,119 @@ private:
 
     QString resultString;
 };
+
+//临时定义的模板和宏，用于单元测试
+#define MSG_FUNC1 1
+#define MSG_FUNC2 2
+#define MSG_FUNC3 3
+#define MSG_FUNC4 4
+#define MSG_FUNC5 5
+#define MSG_FUNC6 6
+#define MSG_FUNC7 7
+
+template <std::size_t N>
+struct MessageRT{using type = void;};
+
+template <>
+struct MessageRT<MSG_FUNC3>{using type = double;};
+
+template <>
+struct MessageRT<MSG_FUNC4>{using type = int;};
+
+template <>
+struct MessageRT<MSG_FUNC5>{using type = int;};
+
+class TestClass
+{
+public:
+    TestClass(){qDebug()<<" new TestClass ";}
+    ~TestClass(){qDebug()<<" delete TestClass ";}
+    void func1(){qDebug()<<"TestClass::func1: ";}
+    void func2(int a,double b){qDebug()<<"TestClass::func2: "<<a<<b;}
+    double func3(double a){qDebug()<<"TestClass::func3: "<<a;return a;}
+    static int func4(TestClass& obj){qDebug()<<"TestClass::func4: ";return obj.value;}
+    int operator () (int a, int b){qDebug()<<"TestClass::operator()(int,int): "<<a<<b;return a+b;}
+
+    friend std::ostream& operator << (std::ostream& os,const TestClass& obj)
+    {
+        return os;
+    }
+
+    friend std::istream& operator >> (std::istream& is,TestClass& obj)
+    {
+        return is;
+    }
+
+private:
+    int value = 30;
+};
+
+inline int testFunc(int a,int b,double c)
+{
+    qDebug()<<"testFunc: "<<a<<b<<c;
+    return a+b+c;
+}
+
+inline TestClass* testFunc2(int a,TestClass*)
+{
+    qDebug()<<"testFunc: "<<a;
+}
+
+inline void testUnit()
+{
+    TestClass* t = MemoryPool::GlobalPool->allocate<TestClass>();
+    MemoryPool::GlobalPool->deallocate(t);
+
+    TestClass* obj = new TestClass();
+
+    //测试MessageWapper构造函数的默认参数
+    //MessageWapper msg_001(testFunc,obj);//类型推导错误，编译器报错
+    //MessageWapper msg_002(&TestClass::func1,obj);//类型推导正确,编译通过
+    //MessageWapper msg_003(&TestClass::func1);//类型推导正确,编译通过
+
+    MessageWapper msg_004A(testFunc);
+    //msg_004A.callByMsg(10,20);//传入错误数量的参数,抛出异常
+    //msg_004A.callByMsg(10,20.5,30.5);//传入类型错误的参数,抛出异常
+    msg_004A.callByMsg(10,20,20.5);//传入正确的参数,输出testFunc:  10 20 20.5
+
+    {
+        MessageWapper msgA(testFunc);
+        MessageWapper msgB = msgA;
+
+        msgA.setMsgArgs(1,2,3.0);
+        msgB.setMsgArgs(10,20,20.0);
+
+        msgA.exec();
+        msgB.exec();
+        qDebug()<<"ssss";
+    }
+
+
+    int result = 0;
+    msg_004A.getResult(&result);
+    qDebug()<<result;
+
+    msg_004A.callByMsg(10,20,30.0);
+    msg_004A.getResult(&result);
+
+    {
+      MessageWapper ms(testFunc2);
+    }
+    {
+      MessageWapper ms(testFunc2);
+    }
+    MessageWapper msg_005(testFunc2);
+
+
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
+    msg_005.callByMsg(10,obj);
+
+    //测试返回值为void和非void的函数
+    //测试普通函数、成员函数、static函数、lambda、std::function、callable
+    //测试MSG调用变量传参
+    //测试SCPI调用字符串传参
+}
+
+#endif // MESSAGEWAPPER_H
