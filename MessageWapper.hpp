@@ -1,16 +1,14 @@
 #ifndef MESSAGEWAPPER_H
 #define MESSAGEWAPPER_H
 
-#include "TemplateTools/FunctionTraits.hpp"
-#include "TemplateTools/StringConvertorQ.hpp"
+#include "AssistUtility/FunctionTraits.hpp"
+#include "AssistUtility/StringConvertorQ.hpp"
 #include <any>
 #include <stdexcept>
 #include <functional>
 #include <future>
 #include <QDebug>
 #include <QStringList>
-
-using namespace MetaUtility;
 
 //使用消息id获取返回值类型
 template <std::size_t N>
@@ -54,7 +52,7 @@ class MessageWapper
         static void setStringArgs(const QStringList& argsList,void* argsTuple)
         {
             if(Arity != argsList.count()){
-                qDebug()<<QString("error:argments number mismatch,%1/%2").arg(Arity).arg(argsList.count());
+                qCritical()<<QString("error:argments number mismatch,%1/%2").arg(Arity).arg(argsList.count());
                 return;
             }
 
@@ -68,7 +66,6 @@ class MessageWapper
             deleter(static_cast<Ret*>(ret));
         }
 
-        //有内存池的情况下可以将这里改为内存池分配空间
         static void initMembers(void*& args,const std::type_info*& argsInfo,void*& ret,const std::type_info*& retInfo)
         {
             init<ArgsTuple>(args,argsInfo);
@@ -119,8 +116,14 @@ class MessageWapper
         static typename std::enable_if<!std::is_void<T>::value>::type
         result(void* from,void* to)
         {
-            if(from != nullptr && to != nullptr)
+            if(from != nullptr)
+            {
+                if(to == nullptr)
+                {
+                    to = static_cast<T*>(::operator new(sizeof (T)));
+                }
                 *static_cast<Ret*>(to) = *static_cast<Ret*>(from);
+            }
         }
 
         template<typename T = Ret>
@@ -146,88 +149,78 @@ class MessageWapper
         }
     };
 
+    class MessageWapperImpl
+    {
+        //***现在测试暂时使用new分配这个内存,正式使用之后改为内存池分配
+        friend class MessageWapper;
+
+        MessageWapperImpl(std::size_t msg);
+
+        ~MessageWapperImpl();
+
+        MessageWapperImpl(const MessageWapperImpl&);
+
+        MessageWapperImpl(MessageWapperImpl&&);
+
+        std::size_t msgId = std::numeric_limits<std::size_t>::max();
+        std::function<void(MessageWapper*)> functor;
+
+        void (*msgArgsHelper)(void*,void*) = nullptr;
+        void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
+        void (*deleteHelper)(void*,void*) = nullptr;
+        void (*resultHelper)(void*,void*) = nullptr;
+
+        void* argsTuple = nullptr;
+        const std::type_info* argTupleInfo = nullptr;
+
+        void* result = nullptr;
+        const std::type_info* resultInfo = nullptr;
+
+        QString resultString;
+    }* d = nullptr;
+
 public:
-    MessageWapper() = delete ;
+    //***可以在构造函数中加入消息id参数，打印错误信息的时候就知道是那一条消息在报错
+    MessageWapper(std::size_t msg = std::numeric_limits<std::size_t>::max());
 
-    MessageWapper(const MessageWapper& other)
-    {
-        this->functor = other.functor;
-        this->msgArgsHelper = other.msgArgsHelper;
-        this->scpiArgsHelper = other.scpiArgsHelper;
-        this->deleteHelper = other.deleteHelper;
-        this->resultHelper = other.resultHelper;
-        this->resultString = other.resultString;
+    MessageWapper(const MessageWapper& other);
 
-        //指针拷贝完成之后对参数指针初始化
-        this->resultInfo = other.resultInfo;
-        this->argTupleInfo = other.argTupleInfo;
-        this->msgArgsHelper(other.argsTuple,this->argsTuple);
-        this->resultHelper(other.result,this->result);
-    }
-
-    MessageWapper(MessageWapper&& other) noexcept
-    {
-        this->functor = std::move(other.functor);
-
-        this->msgArgsHelper = other.msgArgsHelper;
-        other.msgArgsHelper = nullptr;
-
-        this->scpiArgsHelper = other.scpiArgsHelper;
-        other.scpiArgsHelper = nullptr;
-
-        this->deleteHelper = other.deleteHelper;
-        other.deleteHelper = nullptr;
-
-        this->resultHelper = other.resultHelper;
-        other.resultHelper = nullptr;
-
-        this->argsTuple = other.argsTuple;
-        other.argsTuple = nullptr;
-
-        this->result = other.result;
-        other.result = nullptr;
-
-        this->argTupleInfo = other.argTupleInfo;
-        other.argTupleInfo = nullptr;
-
-        this->resultInfo = other.resultInfo;
-        other.resultInfo = nullptr;
-
-        this->resultString = std::move(other.resultString);
-    }
+    MessageWapper(MessageWapper&& other) noexcept;
 
     MessageWapper& operator = (const MessageWapper&) = delete ;
 
     MessageWapper& operator = (MessageWapper&&) = delete ;
 
-    template<typename Func,typename Obj = typename FunctionTraits<Func>::Class,
-             typename Enable = typename std::enable_if<std::is_same<Obj,typename FunctionTraits<Func>::Class>::value>::type>
-    MessageWapper(Func func,Obj* obj = nullptr)
+    template<typename Func,typename Obj = typename FunctionTraits<Func>::Class/*,
+             typename Enable = typename std::enable_if<std::is_same<Obj,typename FunctionTraits<Func>::Class>::value>::type*/>
+    MessageWapper(std::size_t msg,Func func,Obj* obj = nullptr)
     {
         using Ret = typename FunctionTraits<Func>::ReturnType;
         using ArgsTuple = typename FunctionTraits<Func>::BareTupleType;
 
-        msgArgsHelper = &Manager<Ret,ArgsTuple>::setMsgArgs;
-        scpiArgsHelper = &Manager<Ret,ArgsTuple>::setStringArgs;
-        deleteHelper = &Manager<Ret,ArgsTuple>::deleteMembers;
-        resultHelper = &Manager<Ret,ArgsTuple>::result;
+        d = new MessageWapperImpl(msg);
+
+        d->msgArgsHelper = &Manager<Ret,ArgsTuple>::setMsgArgs;
+        d->scpiArgsHelper = &Manager<Ret,ArgsTuple>::setStringArgs;
+        d->deleteHelper = &Manager<Ret,ArgsTuple>::deleteMembers;
+        d->resultHelper = &Manager<Ret,ArgsTuple>::result;
 
         //构造函数不对保存参数和结果的指针分配内存,仅仅在需要往这两个指针中写入数据时才初始化,避免对为设置参数的MessageWapper调用exec()引起UB
         //这两个指针要么为空表示没有保存数据,要么不为空表示已经设置好数据
-        result = nullptr;
-        argsTuple = nullptr;
-        resultInfo = &typeid (Ret);
-        argTupleInfo = &typeid(ArgsTuple);
+        d->result = nullptr;
+        d->argsTuple = nullptr;
+        d->resultInfo = &typeid (Ret);
+        d->argTupleInfo = &typeid(ArgsTuple);
 
         //这里不能将this捕获到lambda中,当lambda捕获类的成员变量时,它实际上捕获的是this指针。
         //拷贝对象时,lambda中的this指针仍然指向原对象A导致新对象B执行函数时错误地访问 A 的数据。
         //例如MessageWapper A,然后通过拷贝构造函数创建B和C,此时B和C的functor中捕获的任然是A的this指针
         //B和C中成员变量无论如何变化,functor的执行结果都和A的执行结果一样,因为functor持有的MessageWapper*是A
         //所以需要将其更改成调用时传入MessageWapper指针
-        functor = [func,obj](MessageWapper* ptr){
-            if(ptr->argsTuple == nullptr)
+        d->functor = [func,obj](MessageWapper* ptr){
+            if(ptr->d->argsTuple == nullptr)
             {
-                qDebug()<<"no parameter has been setted,excute failed";
+                qCritical()<<ptr->d->msgId<<" error:no parameter has been setted,excute failed";
                 return;
             }
 
@@ -235,66 +228,79 @@ public:
         };
     }
 
-    ~MessageWapper() = delete;
-
-    void free()
+    ~MessageWapper()
     {
-        deleteHelper(argsTuple,result);
+        delete d;
     }
 
     void exec()
     {
-        functor(this);
+        if(d->functor.operator bool())
+        {
+            d->functor(this);
+        }
+        else
+        {
+            qCritical()<<d->msgId<<" error:functor is empty,excute failed";
+        }
     }
 
     template<typename...Args>
-    void setMsgArgs(Args&&...args)
+    typename std::enable_if<(sizeof... (Args)>0)>::type
+    setMsgArgs(Args&&...args)
     {
         using Tuple = typename std::tuple<typename std::remove_cv_t<typename std::remove_reference_t<Args>>...>;
-        if(typeid (Tuple) != *argTupleInfo)
+        if(typeid (Tuple) != *d->argTupleInfo)
         {
-            throw std::invalid_argument("Argument type or number mismatch");
+            QString errorInfo = QString::number(d->msgId) + " error:Argument type or number mismatch";
+            throw std::invalid_argument(errorInfo.toStdString());
         }
         Tuple tpl = std::make_tuple(std::forward<Args>(args)...);
-        this->msgArgsHelper(&tpl,argsTuple);
+        this->d->msgArgsHelper(&tpl,d->argsTuple);
     }
+
+    //如果传入的参数列表为空就什么都不做
+    template<typename...Args>
+    typename std::enable_if<(sizeof... (Args)==0)>::type
+    setMsgArgs(Args&&...){}
 
     void setScpiArgs(const QStringList& args)
     {
-        this->scpiArgsHelper(args,argsTuple);
+        this->d->scpiArgsHelper(args,d->argsTuple);
     }
 
     template<typename...Args>
     void callByMsg(Args&&...args)
     {
         setMsgArgs(std::forward<Args>(args)...);
-        functor(this);
+        this->exec();
     }
 
     //这里不能使用重载来调用call，因为call在使用模板传参的时候可能会出现单个参数且参数类型是QStringList的时候，这种情况下会导致参数转发错误，所以需要给这两个函数改名
     void callByScpi(const QStringList& strList)
     {
         setScpiArgs(strList);
-        functor(this);
+        this->exec();
     }
 
     template<std::size_t Index,typename RT = typename MessageReturnType<Index>::type>
     typename std::enable_if<!std::is_void<RT>::value,RT>::type getResult()
     {
-        if(typeid(RT) != *resultInfo)
+        if(typeid(RT) != *d->resultInfo)
         {
             //如果类型不匹配说明代码参数错误,直接报异常
-            throw std::invalid_argument("return value type mismatch");
+            QString errorInfo = QString::number(d->msgId) + " error:return value type mismatch";
+            throw std::invalid_argument(errorInfo.toStdString());
         }
 
-        if(result == nullptr)
+        if(d->result == nullptr)
         {
             //如果是业务流程导致没有计算结果则返回一个对应的零值,同时打印错误信息
-            qWarning()<<"incorrect return value due to nullptr result";
+            qCritical()<<d->msgId<<" error:incorrect return value due to nullptr result";
             return RT{};
         }
         else
-            return *static_cast<RT*>(result);
+            return *static_cast<RT*>(d->result);
     }
 
     template<std::size_t Index,typename RT = typename MessageReturnType<Index>::type>
@@ -302,12 +308,12 @@ public:
 
     void getResult(void* ptr)
     {
-        resultHelper(result,ptr);
+        d->resultHelper(d->result,ptr);
     }
 
     QString getResultString() const noexcept
     {
-        return resultString;
+        return d->resultString;
     }
 
 private:
@@ -359,7 +365,7 @@ private:
     typename std::enable_if<std::is_void<Ret>::value>::type
     callImpl(Func func,std::index_sequence<Index...>)
     {
-        Tuple* tpl = static_cast<Tuple*>(argsTuple);
+        Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         (func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
     }
 
@@ -369,10 +375,10 @@ private:
     typename std::enable_if<!std::is_void<Ret>::value>::type
     callImpl(Func func,std::index_sequence<Index...>)
     {
-        Tuple* tpl = static_cast<Tuple*>(argsTuple);
+        Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         Ret value = (func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
-        resultString = convertArgToString(value);
-        (*static_cast<Ret*>(result)) = value;
+        d->resultString = convertArgToString(value);
+        (*static_cast<Ret*>(d->result)) = value;
     }
 
     template<typename Func,typename Obj,std::size_t... Index,
@@ -381,7 +387,7 @@ private:
     typename std::enable_if<std::is_void<Ret>::value>::type
     callImpl(Func func,Obj* obj,std::index_sequence<Index...>)
     {
-        Tuple* tpl = static_cast<Tuple*>(argsTuple);
+        Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         (obj->*func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
     }
 
@@ -391,95 +397,11 @@ private:
     typename std::enable_if<!std::is_void<Ret>::value>::type
     callImpl(Func func,Obj* obj,std::index_sequence<Index...>)
     {
-        Tuple* tpl = static_cast<Tuple*>(argsTuple);
+        Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         Ret value = (obj->*func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
-        resultString = convertArgToString(value);
-        (*static_cast<Ret*>(result)) = value;
+        d->resultString = convertArgToString(value);
+        (*static_cast<Ret*>(d->result)) = value;
     }
-
-private:
-    std::function<void(MessageWapper*)> functor;
-
-    void (*msgArgsHelper)(void*,void*) = nullptr;
-    void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
-    void (*deleteHelper)(void*,void*) = nullptr;
-    void (*resultHelper)(void*,void*) = nullptr;
-
-    void* argsTuple = nullptr;
-    const std::type_info* argTupleInfo = nullptr;
-
-    void* result = nullptr;
-    const std::type_info* resultInfo = nullptr;
-
-    QString resultString;
 };
-
-//临时定义的模板和宏，用于单元测试
-#define MSG_FUNC1 1
-#define MSG_FUNC2 2
-#define MSG_FUNC3 3
-#define MSG_FUNC4 4
-#define MSG_FUNC5 5
-#define MSG_FUNC6 6
-#define MSG_FUNC7 7
-
-template <std::size_t N>
-struct MessageRT{using type = void;};
-
-template <>
-struct MessageRT<MSG_FUNC3>{using type = double;};
-
-template <>
-struct MessageRT<MSG_FUNC4>{using type = int;};
-
-template <>
-struct MessageRT<MSG_FUNC5>{using type = int;};
-
-class TestClass
-{
-public:
-    TestClass(){qDebug()<<" new TestClass ";}
-    ~TestClass(){qDebug()<<" delete TestClass ";}
-    void func1(){qDebug()<<"TestClass::func1: ";}
-    void func2(int a,double b){qDebug()<<"TestClass::func2: "<<a<<b;}
-    double func3(double a){qDebug()<<"TestClass::func3: "<<a;return a;}
-    static int func4(TestClass& obj){qDebug()<<"TestClass::func4: ";return obj.value;}
-    int operator () (int a, int b){qDebug()<<"TestClass::operator()(int,int): "<<a<<b;return a+b;}
-
-    friend std::ostream& operator << (std::ostream& os,const TestClass& obj)
-    {
-        return os;
-    }
-
-    friend std::istream& operator >> (std::istream& is,TestClass& obj)
-    {
-        return is;
-    }
-
-private:
-    int value = 30;
-};
-
-inline int testFunc(int a,int b,double c)
-{
-    qDebug()<<"testFunc: "<<a<<b<<c;
-    return a+b+c;
-}
-
-inline TestClass* testFunc2(int a,TestClass*)
-{
-    qDebug()<<"testFunc: "<<a;
-}
-
-inline void testUnit()
-{
-    //测试MessageWapper构造函数的默认参数
-
-
-    //测试返回值为void和非void的函数
-    //测试普通函数、成员函数、static函数、lambda、std::function、callable
-    //测试MSG调用变量传参
-    //测试SCPI调用字符串传参
-}
 
 #endif // MESSAGEWAPPER_H
