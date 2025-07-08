@@ -1,8 +1,8 @@
-#ifndef MESSAGEWAPPER_H
+﻿#ifndef MESSAGEWAPPER_H
 #define MESSAGEWAPPER_H
 
-#include "AssistUtility/FunctionTraits.hpp"
-#include "AssistUtility/StringConvertorQ.hpp"
+#include "TemplateTools/FunctionTraits.hpp"
+#include "TemplateTools/StringConvertorQ.hpp"
 #include <any>
 #include <stdexcept>
 #include <functional>
