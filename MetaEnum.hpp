@@ -21,17 +21,10 @@ static std::vector<std::pair<Key,Value>> generateEnumMap(Key key,Value value,Arg
     return std::vector<std::pair<Key,Value>>{};
 }
 
-/**检测类内部的枚举是否也可以这样**/
-#define GenerateArray(EnumType,E,S) std::pair<EnumType,QString>{E,S}
-
-#define GeneRateArray(EnumType,E,S,...)  \
-    std::pair<EnumType,QString>{E,S},\
-    GeneRateArray(EnumType,__VA_ARGS__)
-
 // 注册枚举的宏
 #define RegMetaEnum(EnumType, ...)    \
 template <>     \
-class EnumMap<EnumType> \
+struct EnumMap<EnumType> \
 {    \
 constexpr static bool registed = true;  \
 const std::vector<std::pair<EnumType,QString>> map= generateEnumMap(__VA_ARGS__) ;\
