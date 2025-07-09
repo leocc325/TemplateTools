@@ -14,14 +14,25 @@
 template<typename T>
 struct EnumMapBase
 {
-    EnumMapBase(){}
+    EnumMapBase()
+    {
+        map = new std::vector<std::pair<T,QString>>();
+    }
 
-    EnumMapBase(const std::vector<std::pair<T,QString>>& vec):map(vec){}
+    EnumMapBase(const std::vector<std::pair<T,QString>>& vec)
+    {
+        map = new std::vector<std::pair<T,QString>>(vec);
+    }
+
+    ~EnumMapBase()
+    {
+        delete map;
+    }
 
     T toEnum(const QString& str)
     {
-        auto it = map.cbegin();
-        while (it != map.cend())
+        auto it = map->cbegin();
+        while (it != map->cend())
         {
             if(it->second == str)
             {
@@ -36,8 +47,8 @@ struct EnumMapBase
 
     QString toString(T value)
     {
-        auto it = map.cbegin();
-        while (it != map.cend())
+        auto it = map->cbegin();
+        while (it != map->cend())
         {
             if(it->first == value)
             {
@@ -50,7 +61,8 @@ struct EnumMapBase
         return QString();
     }
 
-    const std::vector<std::pair<T,QString>> map = {};
+private:
+    std::vector<std::pair<T,QString>>* map = nullptr;
 };
 
 template<typename T>
@@ -64,7 +76,6 @@ template <typename Key,typename Value = QString,typename...Args>
 static std::vector<std::pair<Key,Value>>
 generateEnumMap(const Key& key,const Value& value,Args...args)
 {
-    qDebug()<<__PRETTY_FUNCTION__;
     static_assert(sizeof...(Args) % 2 == 0, "Arguments must come in pairs: enum value followed by QString");
 
     const unsigned vecSize = (sizeof...(Args) / 2) + 1;
@@ -114,11 +125,16 @@ constexpr static bool registed = true;  \
 
 /**示例**/
 enum Color{Red,Blue = 5,Green};
+enum Fruit{Apple = 6,Banana,Lemon = 10};
 #if 1
     RegMetaEnum(Color,
                 Red,QString("Red"),
                 Blue,QString("Blue"),
                 Green,QString("Green"))
+    RegMetaEnum(Fruit,
+                Apple,QString("Apple"),
+                Banana,QString("Banana"),
+                Lemon,QString("Lemon"))
 #else
 static const std::vector<std::pair<Color,QString>> colorVec= {
     std::pair<Color,QString>{Red,"Red"},
