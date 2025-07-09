@@ -104,6 +104,11 @@ generateImpl(std::vector<std::pair<Key,Value>>& vec,const Key& key,const Value& 
 
 /**
  * @RegMetaEnum:注册枚举的宏
+ * 参数分别为:EnumType 枚举类名称
+ *          ... 枚举变量、字符串、枚举变量、字符串、枚举变量、字符串...交替输入作为参数
+ * 示例:
+ * enum Color{Red,Blue = 5,Green};
+ * RegMetaEnum(Color,Red,QString("Red"),Blue,QString("Blue"),Green,QString("Green"))
  */
 
 #if 0 /**第一版宏**/
@@ -120,31 +125,6 @@ template<>  \
 struct EnumMap<EnumType>:EnumMapBase<EnumType>{ \
 EnumMap(): EnumMapBase<EnumType>(generateEnumMap(__VA_ARGS__)){}    \
 constexpr static bool registed = true;  \
-};
-#endif
-
-/**示例**/
-enum Color{Red,Blue = 5,Green};
-enum Fruit{Apple = 6,Banana,Lemon = 10};
-#if 1
-    RegMetaEnum(Color,
-                Red,QString("Red"),
-                Blue,QString("Blue"),
-                Green,QString("Green"))
-    RegMetaEnum(Fruit,
-                Apple,QString("Apple"),
-                Banana,QString("Banana"),
-                Lemon,QString("Lemon"))
-#else
-static const std::vector<std::pair<Color,QString>> colorVec= {
-    std::pair<Color,QString>{Red,"Red"},
-    std::pair<Color,QString>{Blue,"Blue"},
-    std::pair<Color,QString>{Green,"Green"}
-};
-template<>
-struct EnumMap<Color>:EnumMapBase<Color>{
-    EnumMap(): EnumMapBase<Color>(colorVec) {}
-    constexpr static bool registed = true;
 };
 #endif
 

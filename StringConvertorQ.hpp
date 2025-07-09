@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QMetaEnum>
 #include <QRegularExpression>
+#include "MetaEnum.hpp"
 
 namespace MetaUtility {
 
@@ -28,10 +29,25 @@ namespace MetaUtility {
     }
 
     ///枚举转换为string
+    template<typename T>
+    typename std::enable_if<EnumMap<T>::registed,QString>::type
+    enumToString(T value)
+    {
+        static EnumMap<T> emap;
+        return emap.toString(value);
+    }
+
+    template<typename T>
+    typename std::enable_if<!EnumMap<T>::registed,QString>::type
+    enumToString(T value)
+    {
+        return QString::number(value);
+    }
+
     template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr>
     inline QString convertArgToString(const T arg)
     {
-        return QString::number(arg);
+        return enumToString(arg);
     }
 
     ///string转换为string
@@ -99,14 +115,34 @@ namespace MetaUtility {
     }
 
     ///字符串转枚举
+    template<typename T>
+    typename std::enable_if<EnumMap<T>::registed,T>::type
+    stringToEnum(const QString& str,T& arg)
+    {
+        static EnumMap<T> emap;
+        arg = emap.toEnum(str);
+        return arg;
+    }
+
+    template<typename T>
+    typename std::enable_if<!EnumMap<T>::registed,bool>::type
+    stringToEnum(const QString& str,T& arg)
+    {
+        arg = static_cast<T>(str.toInt());
+        return true;
+    }
+
     template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
     inline bool convertStringToArg(const QString& str,  T& arg)
     {
         //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
         //查阅QMetaEnum源码的时候在fromType()函数中发现了QtPrivate::IsQEnumHelper<T>::Value这个模板
-        return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
+        //旧版本,使用QMetaEnum转换字符串,现在有MetaEnum之后可以自定义枚举对应的字符串,不需要再使用QMetaEnum转换
+        //return convertStringToEnum(std::integral_constant<bool,QtPrivate::IsQEnumHelper<T>::Value>{},str ,arg);
+        return stringToEnum(str,arg);
     }
 
+    /*
     template<typename T>
     inline bool convertStringToEnum(std::true_type,const QString& str,  T& arg)
     {
@@ -142,6 +178,7 @@ namespace MetaUtility {
         arg = static_cast<T>(str.toInt());
         return true;
     }
+    */
 
     ///字符串转换为浮点型
     template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
