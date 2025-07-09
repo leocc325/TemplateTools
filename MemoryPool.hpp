@@ -1,8 +1,9 @@
-#ifndef MEMORYPOOL_HPP
+﻿#ifndef MEMORYPOOL_HPP
 #define MEMORYPOOL_HPP
 
 #include <cstdint>
 #include <vector>
+#include <list>
 
 /**
  * @brief The MemoryPool class : 专门为消息包装器定制的内存池
@@ -80,6 +81,40 @@ private:
     char* pool = nullptr;
     std::size_t length = 0;
     std::size_t offset = 0;
+};
+
+template<typename T>
+class Allocator
+{
+public:
+    Allocator(std::size_t num)
+    {
+
+    }
+
+    template<typename...Args>
+    void* allocate(Args&&...args)
+    {
+        void* ptr = freeBlocks.front();
+        freeBlocks.pop_front();
+        return ::new (ptr) T(std::forward<Args>(args)...);
+    }
+
+    void deallocate(void* ptr)
+    {
+        ::operator delete(ptr);
+    }
+
+private:
+    void allocateNewBlock()
+    {
+
+    }
+
+private:
+    std::vector<void*> pools;
+    std::list<void*> usedBlocks;
+    std::list<void*> freeBlocks;
 };
 
 #endif // MEMORYPOOL_HPP
