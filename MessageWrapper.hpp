@@ -1,8 +1,8 @@
-﻿#ifndef MESSAGEWAPPER_H
-#define MESSAGEWAPPER_H
+﻿#ifndef MessageWrapper_H
+#define MessageWrapper_H
 
-#include "TemplateTools/FunctionTraits.hpp"
-#include "TemplateTools/StringConvertorQ.hpp"
+#include "FunctionTraits.hpp"
+#include "StringConvertorQ.hpp"
 #include <any>
 #include <stdexcept>
 #include <functional>
@@ -22,7 +22,9 @@ struct MessageReturnType<std::numeric_limits<std::size_t>::max()>{using type = v
 template <> \
 struct MessageReturnType<msg>{using type = func;};
 
-class MessageWapper
+using namespace MetaUtility;
+
+class MessageWrapper
 {
 #if 0
     //直接传递函数指针类型作为模板参数会导致模板膨胀
@@ -149,21 +151,21 @@ class MessageWapper
         }
     };
 
-    class MessageWapperImpl
+    class MessageWrapperImpl
     {
         //***现在测试暂时使用new分配这个内存,正式使用之后改为内存池分配
-        friend class MessageWapper;
+        friend class MessageWrapper;
 
-        MessageWapperImpl(std::size_t msg);
+        MessageWrapperImpl(std::size_t msg);
 
-        ~MessageWapperImpl();
+        ~MessageWrapperImpl();
 
-        MessageWapperImpl(const MessageWapperImpl&);
+        MessageWrapperImpl(const MessageWrapperImpl&);
 
-        MessageWapperImpl(MessageWapperImpl&&);
+        MessageWrapperImpl(MessageWrapperImpl&&);
 
         std::size_t msgId = std::numeric_limits<std::size_t>::max();
-        std::function<void(MessageWapper*)> functor;
+        std::function<void(MessageWrapper*)> functor;
 
         void (*msgArgsHelper)(void*,void*) = nullptr;
         void (*scpiArgsHelper)(const QStringList&,void*) = nullptr;
@@ -181,31 +183,31 @@ class MessageWapper
 
 public:
     //***可以在构造函数中加入消息id参数，打印错误信息的时候就知道是那一条消息在报错
-    MessageWapper(std::size_t msg = std::numeric_limits<std::size_t>::max());
+    MessageWrapper(std::size_t msg = std::numeric_limits<std::size_t>::max());
 
-    MessageWapper(const MessageWapper& other);
+    MessageWrapper(const MessageWrapper& other);
 
-    MessageWapper(MessageWapper&& other) noexcept;
+    MessageWrapper(MessageWrapper&& other) noexcept;
 
-    MessageWapper& operator = (const MessageWapper&) = delete ;
+    MessageWrapper& operator = (const MessageWrapper&) = delete ;
 
-    MessageWapper& operator = (MessageWapper&&) = delete ;
+    MessageWrapper& operator = (MessageWrapper&&) = delete ;
 
     template<typename Func,typename Obj = typename FunctionTraits<Func>::Class/*,
              typename Enable = typename std::enable_if<std::is_same<Obj,typename FunctionTraits<Func>::Class>::value>::type*/>
-    MessageWapper(std::size_t msg,Func func,Obj* obj = nullptr)
+    MessageWrapper(std::size_t msg,Func func,Obj* obj = nullptr)
     {
         using Ret = typename FunctionTraits<Func>::ReturnType;
         using ArgsTuple = typename FunctionTraits<Func>::BareTupleType;
 
-        d = new MessageWapperImpl(msg);
+        d = new MessageWrapperImpl(msg);
 
         d->msgArgsHelper = &Manager<Ret,ArgsTuple>::setMsgArgs;
         d->scpiArgsHelper = &Manager<Ret,ArgsTuple>::setStringArgs;
         d->deleteHelper = &Manager<Ret,ArgsTuple>::deleteMembers;
         d->resultHelper = &Manager<Ret,ArgsTuple>::result;
 
-        //构造函数不对保存参数和结果的指针分配内存,仅仅在需要往这两个指针中写入数据时才初始化,避免对为设置参数的MessageWapper调用exec()引起UB
+        //构造函数不对保存参数和结果的指针分配内存,仅仅在需要往这两个指针中写入数据时才初始化,避免对为设置参数的MessageWrapper调用exec()引起UB
         //这两个指针要么为空表示没有保存数据,要么不为空表示已经设置好数据
         d->result = nullptr;
         d->argsTuple = nullptr;
@@ -214,10 +216,10 @@ public:
 
         //这里不能将this捕获到lambda中,当lambda捕获类的成员变量时,它实际上捕获的是this指针。
         //拷贝对象时,lambda中的this指针仍然指向原对象A导致新对象B执行函数时错误地访问 A 的数据。
-        //例如MessageWapper A,然后通过拷贝构造函数创建B和C,此时B和C的functor中捕获的任然是A的this指针
-        //B和C中成员变量无论如何变化,functor的执行结果都和A的执行结果一样,因为functor持有的MessageWapper*是A
-        //所以需要将其更改成调用时传入MessageWapper指针
-        d->functor = [func,obj](MessageWapper* ptr){
+        //例如MessageWrapper A,然后通过拷贝构造函数创建B和C,此时B和C的functor中捕获的任然是A的this指针
+        //B和C中成员变量无论如何变化,functor的执行结果都和A的执行结果一样,因为functor持有的MessageWrapper*是A
+        //所以需要将其更改成调用时传入MessageWrapper指针
+        d->functor = [func,obj](MessageWrapper* ptr){
             if(ptr->d->argsTuple == nullptr)
             {
                 qCritical()<<ptr->d->msgId<<" error:no parameter has been setted,excute failed";
@@ -228,7 +230,7 @@ public:
         };
     }
 
-    ~MessageWapper()
+    ~MessageWrapper()
     {
         delete d;
     }
@@ -404,4 +406,4 @@ private:
     }
 };
 
-#endif // MESSAGEWAPPER_H
+#endif // MessageWrapper_H
