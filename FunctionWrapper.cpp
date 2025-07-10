@@ -1,6 +1,6 @@
-#include "MessageWrapper.hpp"
+﻿#include "FunctionWrapper.hpp"
 
-MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(std::size_t msg)
+FunctionWrapper::FunctionPrivate::FunctionPrivate(std::size_t msg)
 {
     using Ret = void;
     using ArgsTuple = std::tuple<>;
@@ -11,13 +11,13 @@ MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(std::size_t msg)
     resultInfo = &typeid(Ret);
 }
 
-MessageWrapper::MessageWrapperImpl::~MessageWrapperImpl()
+FunctionWrapper::FunctionPrivate::~FunctionPrivate()
 {
     if(deleteHelper)
         deleteHelper(argsTuple,result);
 }
 
-MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(const MessageWrapper::MessageWrapperImpl &other)
+FunctionWrapper::FunctionPrivate::FunctionPrivate(const FunctionWrapper::FunctionPrivate &other)
 {
     this->msgId = other.msgId;
     this->functor = other.functor;
@@ -34,7 +34,7 @@ MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(const MessageWrapper::Mes
     this->resultHelper(other.result,this->result);
 }
 
-MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(MessageWrapper::MessageWrapperImpl &&other)
+FunctionWrapper::FunctionPrivate::FunctionPrivate(FunctionWrapper::FunctionPrivate &&other)
 {
     this->msgId = other.msgId;
     //这里需要将other.msgId重置为默认值吗？
@@ -68,17 +68,17 @@ MessageWrapper::MessageWrapperImpl::MessageWrapperImpl(MessageWrapper::MessageWr
     this->resultString = std::move(other.resultString);
 }
 
-MessageWrapper::MessageWrapper(std::size_t msg)
+FunctionWrapper::FunctionWrapper(std::size_t msg)
 {
-    d = new MessageWrapperImpl(msg);
+    d = new FunctionPrivate(msg);
 }
 
-MessageWrapper::MessageWrapper(const MessageWrapper &other)
+FunctionWrapper::FunctionWrapper(const FunctionWrapper &other)
 {
-    d = new MessageWrapperImpl(*other.d);
+    d = new FunctionPrivate(*other.d);
 }
 
-MessageWrapper::MessageWrapper(MessageWrapper &&other) noexcept
+FunctionWrapper::FunctionWrapper(FunctionWrapper &&other) noexcept
 {
     d = other.d;
     other.d = nullptr;
