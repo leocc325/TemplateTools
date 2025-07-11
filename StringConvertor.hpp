@@ -9,8 +9,6 @@
 #include <forward_list>
 #include <sstream>
 #include <type_traits>
-#include <iostream>
-#include <string.h>
 
 namespace MetaUtility {
 
@@ -39,30 +37,22 @@ namespace MetaUtility {
         return tokens;
     }
 
-    ///基础模板
-    template<typename T,typename R = T>
-    inline std::string convertArgToString(const T arg)
-    {
-        std::cout<<"unregistered type for convertArgToString";
-        return std::string();
-    }
-
     ///数字量转换为string
-    template<typename T,typename std::enable_if<std::is_arithmetic<T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
     inline std::string convertArgToString(const T arg)
     {
         return std::to_string(arg);
     }
 
     ///枚举转换为string
-    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::typ>
+    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr>
     inline std::string convertArgToString(const T arg)
     {
         return std::to_string(arg);
     }
 
     ///string转换为string
-    template<typename T,typename std::enable_if<std::is_same<std::string,T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_same<std::string,T>::value,T>::type* = nullptr>
     inline std::string convertArgToString(const T arg)
     {
         return arg;
@@ -73,7 +63,7 @@ namespace MetaUtility {
     constexpr static bool IsCharPointer = std::is_same<const char*,T>::value || std::is_same<char*,T>::value;
 
     ///char*转换为string
-    template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type>
+    template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type* = nullptr>
     inline std::string convertArgToString(const T arg)
     {
         return std::string(arg);
@@ -84,7 +74,7 @@ namespace MetaUtility {
     constexpr static bool NonCharPointer = std::is_pointer<T>::value && !IsCharPointer<T>;
 
     ///class object pointer转换为string
-    template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type>
+    template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type* = nullptr>
     inline std::string convertArgToString(const T obj)
     {
         std::stringstream ss;
@@ -121,22 +111,15 @@ namespace MetaUtility {
     template<typename T>
     constexpr static bool IsIntegral = std::is_enum<T>::value || std::is_integral<T>::value;
 
-    ///基础模板
-    template <typename T,typename R = T>
-    inline void convertStringToArg(const std::string& str,T& arg)
-    {
-        std::cout<<"unregistered type for convertStringToArg";
-    }
-
     ///字符串转换为整数
-    template <typename T,typename std::enable_if<IsIntegral<T>,T>::type>
+    template <typename T,typename std::enable_if<IsIntegral<T>,int>::type* = nullptr>
     inline void convertStringToArg(const std::string& str,T& arg)
     {
         arg = static_cast<T>(std::stoll(str));
     }
 
     ///字符串转换为浮点型
-    template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
     inline void convertStringToArg(const std::string& str,T& arg)
     {
         arg = static_cast<T>(std::stold(str));
@@ -152,7 +135,7 @@ namespace MetaUtility {
     }
 
     ///字符串转换为class object pointer
-    template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type>
+    template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type* = nullptr>
     inline void convertStringToArg(const std::string& str,T* obj)
     {
         std::stringstream in;
@@ -168,7 +151,7 @@ namespace MetaUtility {
 
     ///字符串转换为容器
     template<typename T,typename...Args,template<typename...> class Array,
-    typename std::enable_if<IsSequenceContainer<Array,T,Args...>,Array<T,Args...>>::type>
+    typename std::enable_if<IsSequenceContainer<Array,T,Args...>,Array<T,Args...>*>::type* = nullptr>
     inline void convertStringToArg(const std::string& str, Array<T,Args...>& array)
     {
         std::list<std::string> stringList = split(str,spliter.data());
@@ -203,7 +186,7 @@ namespace MetaUtility {
     }
 
     ///字符串转换为数组
-    template<typename T,std::size_t N,typename std::enable_if<std::is_array<T>::value,T>::type>
+    template<typename T,std::size_t N,typename std::enable_if<std::is_array<T>::value,T>::type* = nullptr>
     inline void convertStringToArg(const std::string& str, T(&array)[N])
     {
         std::list<std::string> stringList = split(str,spliter.data());

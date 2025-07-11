@@ -21,16 +21,8 @@ namespace MetaUtility {
     ///数组分隔符
     static QString spliter("[SP]");
 
-    ///基础模板
-    template<typename T,typename R = T>
-    inline QString convertArgToString(const T arg)
-    {
-        qDebug()<<"unregistered type for convertArgToString";
-        return QString();
-    }
-
     ///数字量转换为string
-    template<typename T,typename std::enable_if<std::is_arithmetic<T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
     inline QString convertArgToString(const T arg)
     {
         return QString::number(arg);
@@ -52,14 +44,14 @@ namespace MetaUtility {
         return QString::number(value);
     }
 
-    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr>
     inline QString convertArgToString(const T arg)
     {
         return enumToString(arg);
     }
 
     ///string转换为string
-    template<typename T,typename std::enable_if<std::is_same<QString,T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_same<QString,T>::value,T>::type* = nullptr>
     inline QString convertArgToString(const T arg)
     {
         return arg;
@@ -70,7 +62,7 @@ namespace MetaUtility {
     constexpr static bool IsCharPointer = std::is_same<const char*,T>::value || std::is_same<char*,T>::value;
 
     ///char*转换为string
-    template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type>
+    template<typename T,typename std::enable_if<IsCharPointer<T>,T>::type* = nullptr>
     inline QString convertArgToString(const T arg)
     {
         return QString(arg);
@@ -81,7 +73,7 @@ namespace MetaUtility {
     constexpr static bool NonCharPointer = std::is_pointer<T>::value && !IsCharPointer<T>;
 
     ///class object pointer转换为string
-    template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type>
+    template<typename T,typename std::enable_if<NonCharPointer<T>, T>::type* = nullptr>
     inline QString convertArgToString(const T obj)
     {
         std::stringstream ss;
@@ -115,15 +107,8 @@ namespace MetaUtility {
         return str;
     }
 
-    ///基础模板
-    template <typename T,typename R = T>
-    inline void convertStringToArg(const QString& str,T& arg)
-    {
-        qDebug()<<"unregistered type for convertStringToArg";
-    }
-
     ///字符串转换为整数
-    template <typename T,typename std::enable_if<std::is_integral<T>::value,T>::type>
+    template <typename T,typename std::enable_if<std::is_integral<T>::value,T>::type* = nullptr>
     inline void convertStringToArg(const QString& str,T& arg)
     {
         arg = static_cast<T>(str.toLongLong());
@@ -147,7 +132,7 @@ namespace MetaUtility {
         return true;
     }
 
-    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type >
+    template<typename T,typename std::enable_if<std::is_enum<T>::value,T>::type* = nullptr >
     inline bool convertStringToArg(const QString& str,  T& arg)
     {
         //从字符串往枚举转换时分两种情况：1.数值类型的字符串转换为枚举 2.枚举名称对应的字符串转换为枚举变量(Q_Enum和对应字符串之间的转换)
@@ -196,7 +181,7 @@ namespace MetaUtility {
     */
 
     ///字符串转换为浮点型
-    template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type>
+    template<typename T,typename std::enable_if<std::is_floating_point<T>::value,T>::type* = nullptr>
     inline void convertStringToArg(const QString& str,T& arg)
     {
         arg = static_cast<T>(str.toDouble());
@@ -218,7 +203,7 @@ namespace MetaUtility {
     }
 
     ///字符串转换为class object pointer
-    template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type>
+    template<typename T,typename std::enable_if<NonCharPointer<T*>, T>::type* = nullptr>
     inline void convertStringToArg(const QString& str,T* obj)
     {
         std::stringstream in;
@@ -237,7 +222,7 @@ namespace MetaUtility {
 
     ///字符串转换为容器
     template<typename T,typename...Args,template<typename...> class Array,
-    typename std::enable_if<IsSequenceContainer<Array,T,Args...>,Array<T,Args...>>::type>
+    typename std::enable_if<IsSequenceContainer<Array,T,Args...>,Array<T,Args...>*>::type* = nullptr>
     inline void convertStringToArg(const QString& str, Array<T,Args...>& array)
     {
         QStringList stringList = str.split(spliter);
@@ -272,7 +257,7 @@ namespace MetaUtility {
     }
 
     ///字符串转换为数组
-    template<typename T,std::size_t N,typename std::enable_if<std::is_array<T>::value,T>::type>
+    template<typename T,std::size_t N,typename std::enable_if<std::is_array<T>::value,T>::type* = nullptr>
     inline void convertStringToArg(const QString& str, T(&array)[N])
     {
         QStringList stringList = str.split(spliter);
