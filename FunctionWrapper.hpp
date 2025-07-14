@@ -1,14 +1,16 @@
 ﻿#ifndef FunctionWrapper_H
 #define FunctionWrapper_H
 
+#define CONSOLECALL 0
+
 #include "FunctionTraits.hpp"
+#if CONSOLECALL
 #include "StringConvertorQ.hpp"
-#include <any>
+#endif
 #include <stdexcept>
 #include <functional>
 #include <future>
 #include <QDebug>
-#include <QStringList>
 
 //使用消息id获取返回值类型
 template <std::size_t N>
@@ -26,6 +28,7 @@ using namespace MetaUtility;
 
 class FunctionWrapper
 {
+#if CONSOLECALL
     template<int Index, typename Tuple>
     struct TupleHelper;
 
@@ -51,6 +54,7 @@ class FunctionWrapper
             }
         }
     };
+#endif
 
 #if 0
     //直接传递函数指针类型作为模板参数会导致模板膨胀
@@ -79,6 +83,7 @@ class FunctionWrapper
 
         static void setStringArgs(const QStringList& argsList,void*& argsTuple)
         {
+#if CONSOLECALL
             if(Arity != argsList.count()){
                 qCritical()<<QString("error:argments number mismatch,%1/%2").arg(Arity).arg(argsList.count());
                 return;
@@ -86,6 +91,7 @@ class FunctionWrapper
 
             initTuple(argsTuple);
             TupleHelper<Arity - 1, ArgsTuple>::set(*static_cast<ArgsTuple*>(argsTuple), argsList);
+#endif
         }
 
         static void deleteMembers(void* args,void* ret)
@@ -319,7 +325,7 @@ public:
     typename std::enable_if<(sizeof...(Args)==0)>::type
     setArgs(Args&&...){}
 
-
+#if CONSOLECALL
     void setStringArgs(const QStringList& args)
     {
         this->d->stringArgsHelper(args,d->argsTuple);
@@ -331,6 +337,7 @@ public:
         setStringArgs(strList);
         this->exec();
     }
+#endif
 
     template<std::size_t Index,typename RT = typename FunctionRT<Index>::type>
     typename std::enable_if<!std::is_void<RT>::value,RT>::type getResult()
@@ -367,10 +374,12 @@ public:
             d->resultHelper(d->result,ptr);
     }
 
+#if CONSOLECALL
     QString getResultString() const noexcept
     {
         return d->resultString;
     }
+#endif
 
 private:
     ///调用成员函数
@@ -407,7 +416,9 @@ private:
     {
         Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         Ret value = (func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
+#if CONSOLECALL
         d->resultString = convertArgToString(value);
+#endif
         d->resultHelper(&value,d->result);
     }
 
@@ -429,7 +440,9 @@ private:
     {
         Tuple* tpl = static_cast<Tuple*>(d->argsTuple);
         Ret value = (obj->*func)(std::get<Index>(std::forward<Tuple>(*tpl))...);
+#if CONSOLECALL
         d->resultString = convertArgToString(value);
+#endif
         d->resultHelper(&value,d->result);
     }
 };
