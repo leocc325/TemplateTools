@@ -97,5 +97,6 @@ void SyncThrottle::processTask()
     }
 
     if(task.operator bool() && m_TargetThread)
-        QMetaObject::invokeMethod(m_TargetThread,std::move(task));
+        QMetaObject::invokeMethod(m_TargetThread,std::move(task),Qt::DirectConnection);
+    //这里使用Qt::DirectConnection的原因见https://www.cnblogs.com/GengMingYan/p/18239440例5
 }
