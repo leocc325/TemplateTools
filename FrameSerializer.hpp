@@ -2,7 +2,6 @@
 #define PARAMETERSERIALIZER_HPP
 
 #include "FrameSerializerPrivate.hpp"
-#include <QByteArray>
 
 namespace FrameSerializer
 {
@@ -22,17 +21,6 @@ namespace
     template<unsigned Byte>
     struct Length<Byte>{
         static constexpr unsigned value = Byte;
-    };
-
-    ///判断是否每一个变量都能被转换为无符号整形变量
-    template<typename First,typename...Args>
-    struct IsNumeric{
-        static constexpr bool value = std::is_convertible<First,unsigned>::value && IsNumeric<Args...>::value;
-    };
-
-    template<typename First>
-    struct IsNumeric<First>{
-        static constexpr bool value = std::is_convertible<First,unsigned>::value;
     };
 
     ///当前允许的校验结果最大字节数
@@ -65,9 +53,6 @@ namespace
     using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize) && (Bytes >= Min),DT<Bytes>>::type;
 }
 
-/**
- *允许宽化转换但是不允许窄式转换,即允许用更大的字节数保存对应变量(例如8字节保存float),但是不允许用更小的字节保存对应变量(例如2字节保存float)
- */
 template<unsigned...BytePerArg>
 struct Trans
 {
@@ -85,8 +70,6 @@ struct Trans
     static typename std::enable_if<OneBytePerArg_v<Args...>,Frame>::type
     byProtocol(Args...args)
     {
-        static_assert (IsNumeric<Args...>::value, "All input parameters should be convertible to integer types.");
-
         Frame data(Length<BytePerArg...>::value);
         TransByProtocolSingle<BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
         return data;
@@ -99,10 +82,9 @@ struct Trans
     {
         //数据所占字节数大于1个数据1字节时需要额外判断传入的参数数量是否和描述通信协议的模板参数数量一致
         static_assert (sizeof... (BytePerArg) == sizeof... (Args), "the number of class template should be equal with the number of this function");
-        static_assert (IsNumeric<Args...>::value, "All input parameters should be convertible to integer types.");
 
         Frame data(Length<BytePerArg...>::value);
-        TransByProtocol<BytePerArg...>::transImpl(Mode,data,0,std::forward<Args>(args)...);
+        TransByProtocol<Mode,BytePerArg...>::transImpl(data,0,std::forward<Args>(args)...);
         return data;
     }
 
@@ -110,11 +92,9 @@ struct Trans
     template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
     static Frame fromArray(const Array<T,Args...>& array)
     {
-        constexpr unsigned byteLength = Length<BytePerArg...>::value;
-
         static_assert (sizeof... (BytePerArg) == 1, "the number of class template should be one");
-        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * array.size());
         unsigned argIndex = 0;
         for(const T& value : array)
@@ -129,11 +109,9 @@ struct Trans
     template<ByteMode mode = Big,size_t N,typename T>
     static Frame fromArray(const T(&array)[N])
     {
-        constexpr unsigned byteLength = Length<BytePerArg...>::value;
-
         static_assert (sizeof... (BytePerArg) == 1 , "the number of class template should be one");
-        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * N);
         for(int index = 0; index < N; index++)
         {
@@ -146,11 +124,9 @@ struct Trans
     template<ByteMode mode = Big,typename T>
     static  Frame fromArray(const T* array,std::size_t length)
     {
-        constexpr unsigned byteLength = Length<BytePerArg...>::value;
-
         static_assert (sizeof... (BytePerArg) == 1, "the number of class template should be one");
-        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * length);
         for(unsigned index = 0; index < length; index++)
         {
@@ -178,26 +154,18 @@ private:
     };
 
     ///数据帧长度固定为N,每一个数据占用的字节长度不等时调用此递归模板
-    template<unsigned Byte,unsigned...RemainBytes>
+    template<ByteMode Mode,unsigned Byte,unsigned...RemainBytes>
     struct TransByProtocol
     {
-        template<typename First,typename...Args> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,First first,Args...args)
+        template<typename First,typename...Args> static void transImpl(unsigned char* data,unsigned pos,First first,Args...args)
         {
-            for(unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (mode == Big) ? (Byte - i - 1) * CharBit : (i *CharBit );
-                data[pos+i] = static_cast<unsigned char>(first >> offset) & 0xFF ;
-            }
-            TransByProtocol<RemainBytes...>::transImpl(mode,data,pos+Byte,std::forward<Args>(args)...);
+            placementBits<Mode>(first,data+pos,Byte);
+            TransByProtocol<Mode,RemainBytes...>::transImpl(data,pos+Byte,std::forward<Args>(args)...);
         }
 
-        template<typename Arg> static void transImpl(ByteMode mode,unsigned char* data,unsigned pos,Arg arg)
+        template<typename Arg> static void transImpl(unsigned char* data,unsigned pos,Arg arg)
         {
-            for(int unsigned i = 0; i < Byte; i++)
-            {
-                unsigned offset = (mode == Big) ? (Byte - i - 1) * CharBit : (i * CharBit );
-                data[pos+i] = static_cast<unsigned char>(arg >> offset) & 0xFF ;
-            }
+            placementBits<Mode>(arg,data+pos,Byte);
         }
     };
 
@@ -206,7 +174,7 @@ private:
     static void placementBits(T value,unsigned char* pos,unsigned byteLength)
     {
         unsigned char* valueBits = reinterpret_cast<unsigned char*>(&value);
-        QByteArray arr((char*)valueBits,4);
+
         for(unsigned i = 0; i < byteLength; i++)
         {
             //按被转换的字节数遍历,当被转换的字节数大于T所占的字节数时(比如使用8字节长度来保存float)用0去填充
