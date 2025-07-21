@@ -151,6 +151,7 @@ Frame frameI = Trans<5>::byProtocol(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIbig = Trans<5>::byProtocol<Big>(0x5A,0x02,0x11,0x13,0xA5);
 Frame frameIlittlr = Trans<5>::byProtocol<Little>(0x5A,0x02,0x11,0x13,0xA5);
 ```
+***注:为了避开模板编译时的二义性,出现类似于frameJ的调用时编译会报错,此时将代码更改为FrameI样式的调用即可***<br/>
 
 ***如果仅仅是根据通信协议将传入函数的参数转换为数据帧,基本上只用到上面这一个函数即可。<br />
 但是在某些情况下我们需要通过数据帧来传输数据,而帧的数据段长度可能是变化的,此时无法再通过指定通信协议然后调用byProtocol生成数据帧,也是不现实的。<br />
@@ -211,6 +212,7 @@ frameQ中的内容为:<ins>0x00 0x00 0x11</ins>  <ins>0x00 0x00 0x22</ins>  <ins
 frameR中的内容为:<ins>0x11 0x00 0x00</ins>  <ins>0x22 0x00 0x00</ins>  <ins>0x33 0x00 0x00</ins>  <ins>0x44 0x00 0x00</ins> <br />
 
 **注:Trans类存在对数据类型的限制,要求传入的数组元素类型、容器元素类型、参数类型需要能被隐式转换为整型数据,例如浮点数(可能会转换后的导致数据错误)、枚举值等,如果是自定义类型则需要在类的内部实现整形数据的隐式转换函数。*** <br />
+***注:在2025.7.21的更新中新增了对浮点值类型的支持,现在通过byProtocol生成数据帧或者通过fromArray生成数据帧均可以传入浮点类型的值,但是依然需要注意窄化转换的问题,即:将变量转化char数组时指定的字节长度最好不要小于变量类型所占字节数,否则高位数据会丢失*** <br />
 
 ## 三：关于类 FrameCheck 的成员函数和使用方法介绍
 这个类主要用于对数据帧的数据做校验,主要包含两种类型的校验和校验、crc校验,其中crc校验类型又包含了20多种,基本上可以覆盖数据传输中常用的校验方式,具体的函数使用方法不一一介绍,因为每一种校验的参数基本上都是一致的,这里只拿crc16_modbus举例说明使用方法。 <br />
@@ -281,4 +283,63 @@ FrameCheck::crc32<Little>(frame,start,end,end+1);
 //12 00 14 00 16 00 18 00 1A 00 1C 00 1E 00 20 00 22 00 24 00 26 00 28 00 
 //2A 00 2C 00 2E 00 30 00 32 00 34 00 36 00 38 00 3A 00 3C 00 3E 00 40 00
 //42 00 44 00 46 00 48 00 4A 00 4C 00 4E 00 6F BF CC FD BA
+
+//以及下面这一段代码
+std::vector<int> vec = {111,222,333,444};
+int arr[4] = {111,222,333,444};
+int* arr_p = new int[4];
+arr_p[0] = 111;
+arr_p[1] = 222;
+arr_p[2] = 333;
+arr_p[3] = 444;
+
+Frame f1 = Trans<4>::fromArray<Little>(vec);
+Frame f2 = Trans<4>::fromArray<Little>(arr);
+Frame f3 = Trans<4>::fromArray<Little>(arr_p,4);
+
+qDebug()<<QByteArray(f1,f1.size()).toHex(' ').toUpper();
+qDebug()<<QByteArray(f2,f2.size()).toHex(' ').toUpper();
+qDebug()<<QByteArray(f3,f3.size()).toHex(' ').toUpper();
+
+std::vector<float> vecf = {11.5,22.5,33.5,44.5};
+Frame f4 = Trans<4>::fromArray(vecf);
+qDebug()<<QByteArray(f4,f4.size()).toHex(' ').toUpper();
+
+Frame f5 = Trans<4>::fromArray<Little>(vecf);
+qDebug()<<QByteArray(f5,f5.size()).toHex(' ').toUpper();
+
+const unsigned* d1 = reinterpret_cast<const unsigned*>(&vecf[0]);
+const unsigned* d2 = reinterpret_cast<const unsigned*>(&vecf[1]);
+const unsigned* d3 = reinterpret_cast<const unsigned*>(&vecf[2]);
+const unsigned* d4 = reinterpret_cast<const unsigned*>(&vecf[3]);
+Frame f6 = Trans<4,4,4,4>::byProtocol(*d1,*d2,*d3,*d4);
+qDebug()<<QByteArray(f6,f6.size()).toHex(' ').toUpper();
+
+Frame f7 = Trans<1,4,4,4,4,1>::byProtocol(0x5a,0x11,0x22,0x33,0x44,0xa5);
+qDebug()<<QByteArray(f7,f7.size()).toHex(' ').toUpper();
+
+Frame f8 = Trans<1,4,4,4,4,1>::byProtocol<Little>(0x5a,0x11,0x22,0x33,0x44,0xa5);
+qDebug()<<QByteArray(f8,f8.size()).toHex(' ').toUpper();
+
+Frame f9 = Trans<1,4,4,4,4,1>::byProtocol(0x5a,vecf[0],vecf[1],vecf[2],vecf[3],0xa5);
+qDebug()<<QByteArray(f9,f9.size()).toHex(' ').toUpper();
+
+Frame f10 = Trans<1,4,4,4,4,1>::byProtocol(0x5a,0x11223344,0x22334455,0x33445566,0x44556677,0xa5);
+qDebug()<<QByteArray(f10,f10.size()).toHex(' ').toUpper();
+
+Frame f11 = Trans<1,4,4,4,4,1>::byProtocol<Little>(0x5a,0x11223344,0x22334455,0x33445566,0x44556677,0xa5);
+qDebug()<<QByteArray(f11,f11.size()).toHex(' ').toUpper();
+
+//输出如下：
+//"6F 00 00 00 DE 00 00 00 4D 01 00 00 BC 01 00 00"
+//"6F 00 00 00 DE 00 00 00 4D 01 00 00 BC 01 00 00"
+//"6F 00 00 00 DE 00 00 00 4D 01 00 00 BC 01 00 00"
+//"41 38 00 00 41 B4 00 00 42 06 00 00 42 32 00 00"
+//"00 00 38 41 00 00 B4 41 00 00 06 42 00 00 32 42"
+//"41 38 00 00 41 B4 00 00 42 06 00 00 42 32 00 00"
+//"5A 00 00 00 11 00 00 00 22 00 00 00 33 00 00 00 44 A5"
+//"5A 11 00 00 00 22 00 00 00 33 00 00 00 44 00 00 00 A5"
+//"5A 41 38 00 00 41 B4 00 00 42 06 00 00 42 32 00 00 A5"
+//"5A 11 22 33 44 22 33 44 55 33 44 55 66 44 55 66 77 A5"
+//"5A 44 33 22 11 55 44 33 22 66 55 44 33 77 66 55 44 A5"
 ```
