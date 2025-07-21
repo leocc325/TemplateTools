@@ -2,6 +2,7 @@
 #define PARAMETERSERIALIZER_HPP
 
 #include "FrameSerializerPrivate.hpp"
+#include <QByteArray>
 
 namespace FrameSerializer
 {
@@ -64,6 +65,9 @@ namespace
     using FunctionReturn = typename std::enable_if<(Bytes <= maxCheckSize) && (Bytes >= Min),DT<Bytes>>::type;
 }
 
+/**
+ *允许宽化转换但是不允许窄式转换,即允许用更大的字节数保存对应变量(例如8字节保存float),但是不允许用更小的字节保存对应变量(例如2字节保存float)
+ */
 template<unsigned...BytePerArg>
 struct Trans
 {
@@ -106,45 +110,35 @@ struct Trans
     template<ByteMode mode = Big,typename T,template<typename...Element> class Array,typename...Args>
     static Frame fromArray(const Array<T,Args...>& array)
     {
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
+
         static_assert (sizeof... (BytePerArg) == 1, "the number of class template should be one");
-        static_assert (IsNumeric<T>::value, "All input parameters should be convertible to integer types.");
+        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
-        unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * array.size());
-
         unsigned argIndex = 0;
         for(const T& value : array)
         {
-            for(unsigned i = 0; i < byteLength; i++)
-            {
-                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
-                data[argIndex*byteLength+i] = static_cast<unsigned char>(value >> offset) & 0xFF ;
-            }
+            placementBits<mode>(value,data.data()+argIndex*byteLength,byteLength);
             ++argIndex;
         }
-
         return data;
     }
 
     ///将数组中的数据按顺序转换为占BytePerArg字节的char数组,而且BytePerArg的数量只能为1,转换后的char数组默认为大端保存
     template<ByteMode mode = Big,size_t N,typename T>
-    static   Frame fromArray(const T(&array)[N])
+    static Frame fromArray(const T(&array)[N])
     {
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
+
         static_assert (sizeof... (BytePerArg) == 1 , "the number of class template should be one");
-        static_assert (IsNumeric<T>::value, "All input parameters should be convertible to integer types.");
+        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
-        unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * N);
-
         for(int index = 0; index < N; index++)
         {
-            for(unsigned i = 0; i < byteLength; i++)
-            {
-                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
-                data[index*byteLength+i] = static_cast<unsigned char>(array[index] >> offset) & 0xFF ;
-            }
+            placementBits<mode>(array[index],data.data()+index*byteLength,byteLength);
         }
-
         return data;
     }
 
@@ -152,21 +146,16 @@ struct Trans
     template<ByteMode mode = Big,typename T>
     static  Frame fromArray(const T* array,std::size_t length)
     {
+        constexpr unsigned byteLength = Length<BytePerArg...>::value;
+
         static_assert (sizeof... (BytePerArg) == 1, "the number of class template should be one");
-        static_assert (IsNumeric<T>::value, "All input parameters should be convertible to integer types.");
+        static_assert (byteLength >= sizeof (T), "the placement bits length should larger than the size of value type");
 
-        unsigned byteLength = Length<BytePerArg...>::value;
         Frame data(byteLength * length);
-
         for(unsigned index = 0; index < length; index++)
         {
-            for(unsigned i = 0; i < byteLength; i++)
-            {
-                unsigned offset = (mode == Big) ? (byteLength - i - 1) * CharBit : (i *CharBit );
-                data[index*byteLength+i] = static_cast<unsigned char>(array[index] >> offset) & 0xFF ;
-            }
+            placementBits<mode>(array[index],data.data()+index*byteLength,byteLength);
         }
-
         return data;
     }
 
@@ -212,6 +201,22 @@ private:
         }
     };
 
+    ///将浮点值转换为char数组
+    template<ByteMode mode = Big,typename T>
+    static void placementBits(T value,unsigned char* pos,unsigned byteLength)
+    {
+        unsigned char* valueBits = reinterpret_cast<unsigned char*>(&value);
+        QByteArray arr((char*)valueBits,4);
+        for(unsigned i = 0; i < byteLength; i++)
+        {
+            //按被转换的字节数遍历,当被转换的字节数大于T所占的字节数时(比如使用8字节长度来保存float)用0去填充
+            unsigned char byteValue = (i >= sizeof(T) ) ? 0 : valueBits[i];
+            if(mode == Big)
+                pos[byteLength-i-1] = byteValue;
+            else
+                pos[i] = byteValue;
+        }
+    }
 };
 
 class FrameCheck
