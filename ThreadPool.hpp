@@ -70,14 +70,13 @@ private:
     //这个函数仅仅用来代替移动构造时转移任务队列
     void moveTasks(ThreadQueue& other)
     {
-          std::unique_lock<std::mutex> lock(m_Mutex);
-          other.m_TaskQue = std::move(this->m_TaskQue);
+        {
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            other.m_TaskQue = std::move(this->m_TaskQue);
+        }
+        other.m_CV.notify_one();
     }
 
-    /**
-     * @brief occupied
-     * @return
-     */
     bool occupied() const noexcept
     {
         bool occupyFlag = false;
@@ -92,10 +91,6 @@ private:
         return occupyFlag;
     }
 
-    /**
-     * @brief isIdle 线程处于闲置状态,可以删除
-     * @return
-     */
     bool isIdle()
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
@@ -139,7 +134,7 @@ private:
  * @brief The ThreadPool class
  *
  *如果在添加新的任务的时候有线程池被占用了,就创建一个新的线程池,然后将被占用线程池中的任务移动到新的线程池中
- *如果在添加新的任务时,检测到之前被占用的线程池现在已经闲置了,就释放掉多余的线程池,使活跃的线程池数量尽量和CPU核心数保持一致
+ *如果在添加新的任务时检测到之前被占用的线程池现在已经闲置了,就释放掉多余的线程池,使活跃的线程池数量尽量和CPU核心数保持一致
  */
 class ThreadPool
 {
@@ -161,55 +156,119 @@ public:
         m_CurrentThread = m_Threads.begin();
     }
 
+    ~ThreadPool()
+    {
+        std::vector<ThreadQueue*>::iterator it = m_Threads.begin();
+        while (it != m_Threads.end())
+        {
+            //如果线程未被占用,就结束线程,**对于被占用的线程暂时不处理**
+            if( !(*it)->occupied() )
+            {
+                delete (*it);
+                ++it;
+            }
+        }
+    }
+
+    ThreadPool(const ThreadPool&) = delete ;
+
+    ThreadPool(ThreadPool&& other) = delete ;
+
+    ThreadPool& operator = (const ThreadPool&) = delete ;
+
+    ThreadPool& operator = (ThreadPool&&) = delete ;
+
     ///启动一个后台任务,返回值是一个与std::packaged_task相关联的future,当传入的函数抛出异常时异常会被保存到future中,因此不会对线程池的while循环造成破坏
     ///对future调用get()等同于同步执行任务,当前线程会阻塞直到后台任务完成并获取返回值
     ///不对future调用get()等同于异步执行任务,当前线程会继续向下执行并忽视返回值
-    template<Distribution mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
+    template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
     std::future<ReturnType> run(Func func,Args&&...args)
     {
+        //1.清除线程池中多余的闲置线程
+        deleteIdleThread();
+
+        //2.检测是否存在新的被占用的线程
+        detectNewIdleThread();
+
+        //3.按要求查找一个未被占用的线程
+        ThreadQueue* t = useableThread<Mode>();
+
+        //4.封装任务并且将任务添加到线程队列中
         auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(func,std::forward<Args>(args)...));
         std::future<ReturnType> future = task->get_future();
-        add<mode>( [task](){(*task)();} );
+
+        t->addTask([task](){(*task)();});
         return future;
     }
 
 private:
-    /**
-     *按线程队列在线程池中的顺序依次添加新的任务
-     */
     template<Distribution Mode>
-    typename std::enable_if<Mode == Ordered>::type add(std::function<void()> && task)
+    typename std::enable_if<Mode == Ordered,ThreadQueue*>::type
+    useableThread()
     {
-        (*m_CurrentThread)->addTask(std::move(task));
+        //按顺序查找线程,返回一个未被占用的线程
+        //按run函数中的顺序调用可以始终保证线程池中有未被占用的线程,因此不会陷入死循环
+        while ( (*m_CurrentThread)->occupied() ) {
+            ++m_CurrentThread;
+        }
 
-        ++m_CurrentThread;
-        if(m_CurrentThread == m_Threads.end()){
-            m_CurrentThread = m_Threads.begin();
+        //返回当前线程并让指针指向下一个线程
+        return m_CurrentThread++;
+    }
+
+    template<Distribution Mode>
+    typename std::enable_if<Mode == Balanced,ThreadQueue*>::type
+    useableThread()
+    {
+        //按任务数量查找线程,返回一个当前任务数量最少且未被占用的线程
+        //按run函数中的顺序调用可以始终保证线程池中有未被占用的线程,因此不会返回错误指针
+        auto it = std::min_element(m_Threads.cbegin(),m_Threads.cend(),[](ThreadQueue* t1,ThreadQueue* t2){
+                const bool t1_avail = !t1->occupied();
+                const bool t2_avail = !t2->occupied();
+
+                if (t1_avail != t2_avail)
+                    return t1_avail;
+
+                return t1_avail ? (t1->size() < t2->size()) : false;
+        });
+        return *it;
+    }
+
+    void deleteIdleThread()
+    {
+        if(m_Threads.size() > std::thread::hardware_concurrency())
+        {
+            std::vector<ThreadQueue*>::iterator it = m_Threads.begin();
+            while (it != m_Threads.end())
+            {
+                if( (*it)->isIdle() )
+                {
+                    delete (*it);
+                    it = m_Threads.erase(it);
+                }
+                else
+                    ++it;
+
+                if(m_Threads.size() <= std::thread::hardware_concurrency())
+                    break;
+            }
         }
     }
 
-    /**
-     *按线程队列持有的任务数量添加新的任务,优先将任务派发给持有任务少的线程队列
-     */
-    template<Distribution Mode>
-    typename std::enable_if<Mode == Balanced>::type add(std::function<void()> && task)
+    void detectNewIdleThread()
     {
-        std::map<std::size_t,ThreadQueue*,std::less<std::size_t>> queMap;
-        std::vector<ThreadQueue*>::const_iterator it = m_Threads.cbegin();
-
-        while (it != m_Threads.cend())
+        //反向迭代,如果有被占用的线程可以将新建的线程添加到容器最后,避免遍历新添加的线程
+        std::vector<ThreadQueue*>::reverse_iterator it = m_Threads.rbegin();
+        while (it != m_Threads.rend())
         {
-            queMap.emplace((*it)->size(),*it);
+            //如果线程池被占用了而且线程任务队列不为空,就创建新的线程并且将被占用的线程任务队列转移到新的线程
+            if( (*it)->occupied() && !(*it)->empty() )
+            {
+                ThreadQueue* to = new ThreadQueue();
+                (*it)->moveTasks(*to);
+            }
             ++it;
         }
-        ThreadQueue*  t = (*queMap.begin()).second;
-        t->addTask(std::move(task));
-    }
-
-    void moveThreadQueue(ThreadQueue* from)
-    {
-        ThreadQueue* to = new ThreadQueue();
-        from->moveTasks(*to);
     }
 
 private:
