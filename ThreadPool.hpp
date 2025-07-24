@@ -1,4 +1,4 @@
-#ifndef THREADPOOL_H
+﻿#ifndef THREADPOOL_H
 #define THREADPOOL_H
 
 #include <atomic>
@@ -25,6 +25,7 @@ private:
     ThreadQueue()
     {
         m_Stop.store(false,std::memory_order_relaxed);
+        m_Stoped.store(true,std::memory_order_relaxed);
         m_Thread = std::thread(&ThreadQueue::run,this);
     }
 
@@ -32,6 +33,13 @@ private:
     {
         m_Stop.store(true,std::memory_order_relaxed);
         m_CV.notify_one();
+
+        while (!m_Stoped.load(std::memory_order_relaxed)) {
+            std::this_thread::yield();
+        }
+
+        if (m_Thread.joinable())
+            m_Thread.join();
     }
 
     ThreadQueue(const ThreadQueue&) = delete ;
@@ -67,7 +75,7 @@ private:
     }
 
     //这个函数只能在ThreadQueue对象刚刚创建还没有开始执行任务的时候调用,否则目标对象other没有对任务队列加锁,是不安全的行为
-    //这个函数仅仅用来代替移动构造时转移任务队列
+    //所以这个函数仅仅只能用于转移任务队列到闲置的线程
     void moveTasks(ThreadQueue& other)
     {
         {
@@ -99,12 +107,13 @@ private:
 
     void run()
     {
+        m_Stoped.store(false);
         while (!m_Stop.load(std::memory_order_relaxed))
         {
             if(this->empty())
             {
                 std::unique_lock<std::mutex> lock(m_Mutex);
-                m_CV.wait(lock,[this](){return !m_TaskQue.empty();});
+                m_CV.wait(lock,[this](){return !m_TaskQue.empty() || m_Stop.load(std::memory_order_relaxed);});
             }
             else
             {
@@ -118,6 +127,7 @@ private:
                 m_End = std::chrono::system_clock::now();
             }
         }
+        m_Stoped.store(true);
     }
 
 private:
@@ -126,6 +136,7 @@ private:
     std::mutex m_Mutex;
     std::condition_variable m_CV;
     std::atomic<bool> m_Stop;
+    std::atomic<bool> m_Stoped;
     TimePoint m_Start;
     TimePoint m_End;
 };
@@ -184,11 +195,11 @@ public:
     template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
     std::future<ReturnType> run(Func func,Args&&...args)
     {
-        //1.清除线程池中多余的闲置线程
-        deleteIdleThread();
-
-        //2.检测是否存在新的被占用的线程
+        //1.检测是否存在新的被占用的线程
         detectNewIdleThread();
+
+        //2.清除线程池中多余的闲置线程
+        deleteIdleThread();
 
         //3.按要求查找一个未被占用的线程
         ThreadQueue* t = useableThread<Mode>();
@@ -213,7 +224,7 @@ private:
         }
 
         //返回当前线程并让指针指向下一个线程
-        return m_CurrentThread++;
+        return *m_CurrentThread++;
     }
 
     template<Distribution Mode>
@@ -261,14 +272,33 @@ private:
         std::vector<ThreadQueue*>::reverse_iterator it = m_Threads.rbegin();
         while (it != m_Threads.rend())
         {
-            //如果线程池被占用了而且线程任务队列不为空,就创建新的线程并且将被占用的线程任务队列转移到新的线程
             if( (*it)->occupied() && !(*it)->empty() )
             {
-                ThreadQueue* to = new ThreadQueue();
+                ThreadQueue* to = findIdleThread();
+                if(to == nullptr)
+                {
+                    to = new ThreadQueue();
+                    m_Threads.push_back(to);
+                }
+
                 (*it)->moveTasks(*to);
             }
             ++it;
         }
+    }
+
+    ThreadQueue* findIdleThread()
+    {
+        std::vector<ThreadQueue*>::iterator it = m_Threads.begin();
+        while (it != m_Threads.end())
+        {
+            if( (*it)->isIdle() )
+                return (*it);
+
+            ++it;
+        }
+
+        return nullptr;
     }
 
 private:

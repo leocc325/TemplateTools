@@ -8,16 +8,72 @@ ThreadPool是一个动态的线程池,可以根据当前线程池状态自动拓
 #### 1.构造函数ThreadPool(unsigned size = 0)
 初始化一个大小为size的线程池,当size = 0时,线程池大小为CPU核心支持的最大线程数量,在默认状态下,线程池大小不会超过CPU核心数。<br />
 
-### 2.成员函数template<Distribution Mode = Ordered,typename Func,typename...Args> 
-###	      std::future<ReturnType> run(Func func,Args&&...args)
+### 2.成员函数template<Distribution Mode = Ordered,typename Func,typename...Args> std::future<ReturnType> run(Func func,Args&&...args)
 添加一个可执行任务,模板参数Mode表明添加策略:Ordered(按顺序添加)、Balanced(均衡线程池任务)。
+```c++
+void func(int a,double b){
+    //...do something
+}
+...
+ThreadPool p;
+//以顺序模式添加任务
+p.run<Ordered>(func,10,20);
+p.run<Ordered>(func,20,30);
+p.run<Ordered>(func,30,40);
+
+ThreadPool p2;
+//以均衡模式添加任务
+p2.run<Balanced>(func,40,50);
+p2.run<Balanced>(func,50,60);
+p2.run<Balanced>(func,60,70);
 ```
 
-```
+## 二：ThreadPool原理
 
+ThreadPool内部维护了一个ThreadQue数组,这个ThreadQue数组在初始化时长度不会超过CPU核心线程数,但是在后续的使用中会动态地变化。
+每一次调用run()函数时,在真正将传递给线程队列之前都需要做以下几件事
+
+**1.检测是否存在新的被占用的线程**
+每次调用run()函数添加任务都会统计每一个线程队列中当前任务的执行时长,当任务的执行时长超过指定时间之后，当前线程会被标记为[已占用]。当出现新的被占用的线程时,线程池会创建一个新的线程,并且将被占用的线程中等待执行的任务转移空闲线程中,如果当前没有闲置的线程就创建一个新的线程并转移任务队列。这样处理是为了确保被传入的任务不会因为前面长时间的任务阻塞,作为线程池提供者,我们并不能保证线程池使用者不会传入一个while()循环式的任务,如果线程池不能检测这种情况,那么这个while()循环后面传入的任务可能长时间甚至永远不会得到执行。
+
+**2.清除线程池中多余的闲置线程**
+run()函数在执行时除了会检测新的被占用线程,还会检测[闲置]的线程。待删除线程属于被标记为[已占用]线程的下一阶段状态,因为这些检测工作发生于函数指针被包装为任务传入线程队列之前,所以如果某一个线程之前被标记为[已占用],而且此时这个线程中的任务已经执行完毕,那么这个线程此时一定处于闲置状态,因为此时并没有新的任务被补充到任务队列中。闲置状态的线程也不是只会由被占用线程演化而来,未被占用的线程也会变为闲置线程,仅仅只是简单地因为任务队列中的任务执行完毕了。但是并不是每一次检测到闲置线程都会将闲置线程删除,只有在当前ThreadQue数组大小超过了CPU核心线程数这种删除才会发生,因为线程池目的是将执行的线程尽可能维持在这个数量。
+
+**3.按要求查找一个未被占用的线程**
+在执行完上述两个步骤的检查之后,线程池会根据给定的任务策略返回一个可用的线程,并且将函数封装成一个任务添加到线程的待执行队列中。当策略为[Ordered]时会按线程在线程池中的顺序依次返回。当策略为[Balanced]时会返回一个持有任务数量最少的线程作为新的任务的执行线程。
+
+**4.获取线程执行结果**
+run()函数执行完毕之后会返回一个对应的future对象,显示调用future的get()函数达到阻塞线程等待执行结果的效果,如果不需要等待线程执行结果则无需显示获取future对象或者调用future的get()函数。当然,如果不显示调用get()函数,任务中抛出的异常也会被吞掉,可能会导致难以排查的bug,所以如果传入run()函数的任务不是noexcept的,建议try/catch捕获一下异常。
 
 ## 四：一个完整的示例。
-
+假设CPU的核心只能支持4个线程并行然后执行以下代码
 ```c++
+void sleep(int time){
+    //sleep for time seconds
+}
 
+void print(){
+    //print thread id
+}
+
+void func()
+{
+    sleep(5);
+    print();
+}
+
+ThreadPool p;
+p.run(func);
+p.run(func);
+p.run(func);
+p.run(func);
+p.run(func);
+//此时线程池的容量为5
+p.run(func);
+//此时线程池的容量为6
+
+sleep(10);
+//此时线程池数量依然为6,因为没有新的任务添加到线程池,不会触发空闲线程的检测以及线程池的更新
+p.run(func);
+//此时线程池数量被更新为4,多余的两个闲置线程被删除
 ```
