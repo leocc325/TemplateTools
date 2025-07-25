@@ -9,9 +9,7 @@
 #include <condition_variable>
 #include <queue>
 #include <vector>
-#include <map>
-#include <QDebug>
-#include <QThread>
+#include <algorithm>
 #include "FunctionTraits.hpp"
 /**
  * @brief The ThreadQueue class
