@@ -3,7 +3,7 @@
 ```c++
 double add(int a,double b)
 {
-    std::cout<<__PRETTY_FUNCTION__<<a<<b<<std::endl<<std::flush;
+    std::cout<<__PRETTY_FUNCTION__<<a<<" "<<b<<std::endl<<std::flush;
     return a + b;
 }
 
@@ -12,7 +12,7 @@ class Object
 public:
     double subtract(double a,int b)
     {
-        std::cout<<__PRETTY_FUNCTION__<<a<<b<<std::endl<<std::flush;
+        std::cout<<__PRETTY_FUNCTION__<<a<<" "<<b<<std::endl<<std::flush;
         return a - b;
     }
 };
@@ -22,13 +22,14 @@ public:
 
 
 FunctionWrapper是一个函数包装器,可以将其视为一个***完全擦除了类型的std::function***,但是在类的内部保存了所有必要的信息,这些信息如下：<br />
+***函数指针、函数指针信息、函数参数信息、参数包指针、参数包信息、返回值指针、返回值信息***
 
 ### FunctionWrapper成员函数简介:<br />
 
 #### 1.默认构造函数FunctionWrapper()
 生成一个不包含函数指针和参数指针以及信息的的FunctionWrapper,这也意味着后续无法再设置其函数指针(移动构造和赋值除外) <br />
 ```c++
-FunctionWrapper f;
+FunctionWrapper funcA;
 //创建了一个不包含函数指针和参数包的FunctionWrapper;
 ```
 
@@ -57,26 +58,111 @@ funcB.setArgs(5,double(10));
 
 #### 4.void exec()
 exec()为调用保存的函数指针的最终接口,这个函数内部会将保存的参数转发到保存的函数指针并完成函数指针的调用。
-如果FunctionWrapper内部没有包含函数指针,则什么都不会发生并且打印错误信息 函数指针信息 + :error:functor is empty,excute failed
-如果FunctionWrapper内部设置函数参数,同样什么都不会发生并且打印错误信息 函数指针信息 + :error:no parameter has been setted,excute failed
+如果FunctionWrapper内部没有包含函数指针,则什么都不会发生并且打印错误信息 ***函数指针信息 + :error:functor is empty,excute failed***
+如果FunctionWrapper内部设置函数参数,同样什么都不会发生并且打印错误信息 ***函数指针信息 + :error:no parameter has been setted,excute failed***
 ```c++
-//对于上方的FuncA,FuncB,FuncC分别调用exec()则会打印如下信息
-funcA.exec();
-//调用失败:输出Dn  error:functor is empty,excute failed
+//对于以下代码,执行之后会产生输出
+FunctionWrapper funcA;
+
+FunctionWrapper funcB(add);
+    
+Object* obj = new Object();
+FunctionWrapper funcC(&Object::subtract,obj);
+    
 funcB.exec();
-//调用失败:输出PFdidE  error:no parameter has been setted,excute failed
+//此时funcB内部保存的参数为空,打印信息为:PFdidE  error:no parameter has been setted,excute failed
+    
+funcB.setArgs(5,double(10));
+//将funcB的参数设置为5,10
+
+funcB.exec();
+//再次执行funcB,打印信息为:double add(int, double)5 10,表明add已经被成功调用
+    
+funcB.setArgs(10,double(20));
+//重新将funcB的参数设置为10,20
+
+funcB.exec();
+//再次执行funcB,打印信息为:double add(int, double)10 20,funcB参数更新成功
+
 funcC.exec();
-//调用失败:输出M6ObjectFddiE  error:no parameter has been setted,excute failed
-funcC.exec(10.5,5);
-//调用成功:输出double Object::subtract(double, int)10.55
+//打印信息为:M6ObjectFddiE  error:no parameter has been setted,excute failed
+    
+funcC.setArgs(2.5,1);
+//将Object::subtract的参数设置为2.5,1
+    
+funcC.exec();
+//执行funcC,打印信息为:double Object::subtract(double, int)2.5 1
+    
+funcC.setArgs(double(30),10);
+//将funcC参数设置为30,10
+    
+funcC.exec();
+//执行funcC,打印信息为:double Object::subtract(double, int)30 10
+    
 ```
+调用setArgs并且参数设置成功之后,这些参数将长期保存在FunctionWrapper内部,不会在exec执行之后被清空。这些参数将被反复使用,直到下一次调用setArgs刷新保存的参数。
 
 #### 5.template<typename...Args> void exec(Args&&...args)
-exec()的重载,相当于将args...设置为函数参数并且调用exec()
+exec()的重载,含义为使用Args作为参数并调用内部函数指针
+```c++
+funcC.setArgs(2.5,1); 
+funcC.exec();
+
+//上面两行代码完全等价于下面这一行代码
+
+funcC.exec(2.5,1);
+```
+总的来说,这两种方案的区别仅仅在与setArgs提供了一种可以延时执行函数的机制,比如在保存历史状态、撤销、重做等情况下需要保存函数参数但是并不需要马上执行。exec(Args&&...args)则代表了对函数的立刻执行。
 
 #### 6.template<typename...Args> void operator() (Args&&...args)
-等同于template<typename...Args> void exec(Args&&...args)
+完全等同于exec(Args&&...args)
 
+#### 7.template<typename RT> getResult()
+获取返回值,需要指定完全正确的返回值类型(不支持隐式转换),否则会抛出异常
+```c++
+funcC.exec(22.123,10);
+float ret1 = funcC.getResult<float>();
+//ret1抛出异常,因为funcC内部的函数指针返回值为double,但是在获取返回值时指定的类型为float,导致转换失败
+double ret2 = funcC.getResult<double>();
+//ret2 = 12.123
+```
+
+#### 8.void getResult(void* ptr)
+获取返回值,不如template<typename RT> getResult()好用
+```c++
+double ret3 = 0;
+funcC.getResult(&ret3);
+//ret3 = 12.123
+```
+
+### FunctionWrapper额外成员函数补充,这一部分功能需要将CONSOLECALL设置为1并且包含StringConvertorQ.hpp才可正常使用<br />
+这些额外的函数支持将字符串参数转换为函数变量并完成对函数的调用,可以用于控制台、远程指令等功能。
+
+#### 9.void setStringArgs(const QStringList& args)
+将QStringList切割为若干个字符串,并且将字符串转换为对应的参数保存在FunctionWrapper内
+```c++
+QStringList args = {"60","30"};
+funcC.setStringArgs(args);
+
+funcC.exec();
+//打印信息为:double Object::subtract(double, int)60 30
+```
+
+#### 10. void execString(const QStringList& strList)
+将字符串作为参数传入并且调用函数
+```c++
+QStringList args = {"60","30"};
+
+funcC.setStringArgs(args);
+funcC.exec();
+
+//上面两行代码完全等价于下面这一行代码
+
+funcC.execString(args);
+```
+
+#### 11.QString getResultString() const noexcept
+获取返回值并将返回值转换为字符串
 
 ## 二：一个完整的示例。
 

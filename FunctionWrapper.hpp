@@ -339,7 +339,7 @@ public:
     }
 #endif
 
-    template<std::size_t Index,typename RT = typename FunctionRT<Index>::type>
+    template<typename RT>
     typename std::enable_if<!std::is_void<RT>::value,RT>::type getResult()
     {
         if(typeid(RT) != *d->resultInfo)
@@ -360,9 +360,15 @@ public:
     }
 
     template<std::size_t Index,typename RT = typename FunctionRT<Index>::type>
+    typename std::enable_if<!std::is_void<RT>::value,RT>::type getResult()
+    {
+        return getResult<RT>();
+    }
+
+    template<std::size_t Index,typename RT = typename FunctionRT<Index>::type>
     typename std::enable_if<std::is_void<RT>::value>::type getResult(){}
 
-    void getResult(void*& ptr)
+    void getResult(void* ptr)
     {
         if(d->result == nullptr)
         {
