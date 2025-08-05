@@ -72,7 +72,7 @@ public:
     {
         AsyncThrottle* t = funcMapCheck<AsyncThrottle,Func>(time,func);
         std::function<void()> task = std::bind(std::forward<Func>(func),std::forward<Args>(args)...);
-        t->addTask(std::move(task));
+        t->addTask(std::move(task),time);
     }
 
     ///传入的函数会在单独的线程中执行,不建议调用GUI相关的函数
@@ -82,7 +82,7 @@ public:
     {
         AsyncThrottle* t = funcMapCheck<AsyncThrottle,Func,Obj>(time,func,obj);
         std::function<void()> task = std::bind(std::forward<Func>(func),obj,std::forward<Args>(args)...);
-        t->addTask(std::move(task));
+        t->addTask(std::move(task),time);
     }
 
     ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
@@ -92,7 +92,7 @@ public:
     {
         SyncThrottle* t = funcMapCheck<SyncThrottle,Func>(time,func);
         std::function<void()> task = std::bind(std::forward<Func>(func),std::forward<Args>(args)...);
-        t->addTask(std::move(task));
+        t->addTask(std::move(task),time);
     }
 
     ///捕获时间间隔内最后一次被调用的函数和参数，并将其交还给捕获动作发生所在的线程，被捕获的函数会在其自身线程的下一次事件循环中被调用
@@ -102,7 +102,7 @@ public:
     {
         SyncThrottle* t = funcMapCheck<SyncThrottle,Func,Obj>(time,func,obj);
         std::function<void()> task = std::bind(std::forward<Func>(func),obj,std::forward<Args>(args)...);
-        t->addTask(std::move(task));
+        t->addTask(std::move(task),time);
     }
 
 private:

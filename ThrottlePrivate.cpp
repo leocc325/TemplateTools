@@ -52,11 +52,12 @@ void AbstractThrottle::taskThread()
     }
 }
 
-void AbstractThrottle::addTask(std::function<void ()> &&task)
+void AbstractThrottle::addTask(std::function<void ()> &&task,std::size_t interval)
 {
     bool notifyFlag = false;
     {
         std::lock_guard<std::mutex> guard(m_Mutex);
+        m_Interval = interval;
         notifyFlag = m_TaskQue.empty();
         m_TaskQue.push_back(std::move(task));
     }

@@ -25,7 +25,7 @@ protected:
     virtual void processTask() = 0;
 
 private:
-    void addTask(std::function<void()>&& task);
+    void addTask(std::function<void()>&& task,std::size_t interval);
     bool isEmpty();
     void taskThread();
 
@@ -33,7 +33,7 @@ protected:
     std::condition_variable m_CV;
     std::mutex m_Mutex;
     std::list<std::function<void()>> m_TaskQue;
-    std::chrono::milliseconds m_Interval{1000};
+    std::atomic<std::size_t> m_Interval{1000};
     std::atomic<bool> m_QuitFlag;
 };
 
