@@ -9,7 +9,6 @@
 #include <iostream>
 #include <atomic>
 #include <thread>
-
 /**
  * @brief The MemoryPoolAny class **需要加锁保证线程安全
  * MemoryPoolAny被分为一级分配器和二级分配器,一级分配器用来分配大于256字节的内存块,二级分配器用来分配小于256字节的内存,分配器分配的内存都会被添加到哈希表中复用(目前只有二级分配器的内存会被复用)
@@ -117,9 +116,9 @@ public:
             info += std::to_string(key) + "-" + std::to_string(count) + "   ";
             ++freeIt;
         }
-        std::cout<<info<<std::flush;
+        std::cout<<info<<std::endl<<std::flush;
 
-        info = "UsedBlock status";
+        info = "UsedBlock status:";
         while (usedIt != usedBlocks.cend())
         {
             int key = (*usedIt).first;
@@ -161,9 +160,6 @@ private:
         if(buf == nullptr)
             buf = findFromMemoryPage(size);
 
-        if(buf != nullptr)
-            usedBlocks.emplace(size,buf);
-
         return buf;
     }
 
@@ -196,8 +192,9 @@ private:
             allocateNewPage();
         }
 
-        void* buf = pages.back();
+        void* buf = pages.back();  
         offset += size;
+        usedBlocks.emplace(size,buf);
         return buf;
     }
 
