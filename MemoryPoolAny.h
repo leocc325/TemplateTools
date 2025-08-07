@@ -82,28 +82,14 @@ public:
     {
         obj->~T();
         if(SizeUp<T>::value > MAXBYTES)
-        {
             ::operator delete(obj);
-        }
         else
-        {
-            auto range = usedBlocks.equal_range(unsigned(SizeUp<T>::value));
-            for (auto it = range.first; it != range.second; ++it)
-            {
-                if (it->second == obj)
-                {
-                    it = usedBlocks.erase(it);
-                    break;
-                }
-            }
             freeBlocks.emplace(unsigned(SizeUp<T>::value),obj);
-        }
     }
 
     void printPoolStatus()
     {
         auto freeIt = freeBlocks.cbegin();
-        auto usedIt = usedBlocks.cbegin();
 
         std::string info  = "FreeBlocks status:";
         while (freeIt != freeBlocks.cend())
@@ -117,19 +103,6 @@ public:
             ++freeIt;
         }
         std::cout<<info<<std::endl<<std::flush;
-
-        info = "UsedBlock status:";
-        while (usedIt != usedBlocks.cend())
-        {
-            int key = (*usedIt).first;
-            if( key > MAXBYTES)
-                break;
-
-            int count = usedBlocks.count(key);
-            info += std::to_string(key) + "-" + std::to_string(count) + "   ";
-            ++usedIt;
-        }
-        std::cout<<info<<std::flush<<std::endl;
     }
 
 private:
@@ -174,7 +147,6 @@ private:
         else
         {
             freeBlocks.erase(it);
-            usedBlocks.insert(*it);
             return (*it).second;
         }
     }
@@ -194,7 +166,6 @@ private:
 
         void* buf = pages.back();  
         offset += size;
-        usedBlocks.emplace(size,buf);
         return buf;
     }
 
@@ -232,7 +203,6 @@ private:
     std::size_t offset = 0;//内存页地址偏移,用于计算当前内存页是空余大小
     std::vector<void*> pages;//内存页容器
     std::unordered_multimap<unsigned,void*> freeBlocks;//空闲的内存块
-    std::unordered_multimap<unsigned,void*> usedBlocks;//使用中的内存块
 };
 
 #endif // MEMORYPOOLANY_H
