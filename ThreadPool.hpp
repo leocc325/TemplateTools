@@ -103,6 +103,21 @@ private:
         return m_TaskQue.empty() && (m_End > m_Start);
     }
 
+    ///等待当前线程任务完成
+    void wait(std::promise<bool>&& p)
+    {
+        std::unique_lock<std::mutex> lock(m_Mutex);
+        if(m_TaskQue.empty() && (m_End > m_Start))
+        {
+            p.set_value(true);
+        }
+        else
+        {
+            m_DoneFlag.store(true);
+            m_Done = std::move(p);
+        }
+    }
+
     void run()
     {
         m_Stoped.store(false);
@@ -111,6 +126,12 @@ private:
             if(this->empty())
             {
                 std::unique_lock<std::mutex> lock(m_Mutex);
+                if(m_DoneFlag.load())
+                {
+                    //m_DoneFlag控制线程只在调用了wait(std::promise<bool>&& p)之后设置一次promise
+                    m_Done.set_value(true);
+                    m_DoneFlag.store(false);
+                }
                 m_CV.wait(lock,[this](){return !m_TaskQue.empty() || m_Stop.load(std::memory_order_relaxed);});
             }
             else
@@ -135,6 +156,8 @@ private:
     std::condition_variable m_CV;
     std::atomic<bool> m_Stop;
     std::atomic<bool> m_Stoped;
+    std::atomic<bool> m_DoneFlag{false};
+    std::promise<bool> m_Done;
     TimePoint m_Start;
     TimePoint m_End;
 };
@@ -208,6 +231,20 @@ public:
 
         t->addTask([task](){(*task)();});
         return future;
+    }
+
+    void waitforDone()
+    {
+        std::vector<ThreadQueue*>::iterator it = m_Threads.begin();
+        while (it != m_Threads.end())
+        {
+            std::promise<bool> p;
+            std::future<bool> f = p.get_future();
+            (*it)->wait(std::move(p));
+            f.get();
+
+            ++it;
+        }
     }
 
 private:
