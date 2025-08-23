@@ -109,7 +109,7 @@ private:
         std::unique_lock<std::mutex> lock(m_Mutex);
         if(m_TaskQue.empty() && (m_End > m_Start))
         {
-            p.set_value(true);
+            p.set_value(false);
         }
         else
         {
@@ -158,8 +158,9 @@ private:
     std::atomic<bool> m_Stoped;
     std::atomic<bool> m_DoneFlag{false};
     std::promise<bool> m_Done;
-    TimePoint m_Start;
-    TimePoint m_End;
+    TimePoint m_Start = std::chrono::system_clock::now();
+    //确保m_End在初始条件下就比m_Start大,否则线程池在初始条件下调用wait会直接卡死线程
+    TimePoint m_End = std::chrono::nanoseconds(1) + m_Start;
 };
 
 /**
@@ -213,7 +214,7 @@ public:
     ///启动一个后台任务,返回值是一个与std::packaged_task相关联的future,当传入的函数抛出异常时异常会被保存到future中,因此不会对线程池的while循环造成破坏
     ///对future调用get()等同于同步执行任务,当前线程会阻塞直到后台任务完成并获取返回值
     ///不对future调用get()等同于异步执行任务,当前线程会继续向下执行并忽视返回值
-    template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
+    template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename FunctionTraits<Func>::ReturnType>
     std::future<ReturnType> run(Func func,Args&&...args)
     {
         //1.检测是否存在新的被占用的线程
@@ -228,7 +229,6 @@ public:
         //4.封装任务并且将任务添加到线程队列中
         auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(func,std::forward<Args>(args)...));
         std::future<ReturnType> future = task->get_future();
-
         t->addTask([task](){(*task)();});
         return future;
     }
@@ -254,12 +254,16 @@ private:
     {
         //按顺序查找线程,返回一个未被占用的线程
         //按run函数中的顺序调用可以始终保证线程池中有未被占用的线程,因此不会陷入死循环
-        while ( (*m_CurrentThread)->occupied() ) {
-            ++m_CurrentThread;
-        }
+        while (true)
+        {
+            if(m_CurrentThread == m_Threads.end() )
+                m_CurrentThread =  m_Threads.begin();
 
-        //返回当前线程并让指针指向下一个线程
-        return *m_CurrentThread++;
+            if( (*m_CurrentThread)->occupied() )
+                ++m_CurrentThread;
+            else
+                return *m_CurrentThread++;//返回当前线程指针并让这个指针指向下一个位置
+        }
     }
 
     template<Distribution Mode>
@@ -269,13 +273,13 @@ private:
         //按任务数量查找线程,返回一个当前任务数量最少且未被占用的线程
         //按run函数中的顺序调用可以始终保证线程池中有未被占用的线程,因此不会返回错误指针
         auto it = std::min_element(m_Threads.cbegin(),m_Threads.cend(),[](ThreadQueue* t1,ThreadQueue* t2){
-                const bool t1_avail = !t1->occupied();
-                const bool t2_avail = !t2->occupied();
+            const bool t1_avail = !t1->occupied();
+            const bool t2_avail = !t2->occupied();
 
-                if (t1_avail != t2_avail)
-                    return t1_avail;
+            if (t1_avail != t2_avail)
+                return t1_avail;
 
-                return t1_avail ? (t1->size() < t2->size()) : false;
+            return t1_avail ? (t1->size() < t2->size()) : false;
         });
         return *it;
     }
