@@ -1,4 +1,4 @@
-﻿#ifndef THREADPOOL_H
+#ifndef THREADPOOL_H
 #define THREADPOOL_H
 
 #include <atomic>
@@ -100,14 +100,14 @@ private:
     bool isIdle()
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
-        return m_TaskQue.empty() && (m_End > m_Start);
+        return m_TaskQue.empty() && (m_End >= m_Start);
     }
 
     ///等待当前线程任务完成
     void wait(std::promise<bool>&& p)
     {
         std::unique_lock<std::mutex> lock(m_Mutex);
-        if(m_TaskQue.empty() && (m_End > m_Start))
+        if(m_TaskQue.empty() && (m_End >= m_Start))
         {
             p.set_value(false);
         }
@@ -159,8 +159,8 @@ private:
     std::atomic<bool> m_DoneFlag{false};
     std::promise<bool> m_Done;
     TimePoint m_Start = std::chrono::system_clock::now();
-    //确保m_End在初始条件下就比m_Start大,否则线程池在初始条件下调用wait会直接卡死线程
-    TimePoint m_End = std::chrono::nanoseconds(1) + m_Start;
+    //结束时间小于或者等于起始时间都能代表线程闲置,由于系统缓存的原因,在重复执行同一个任务时有可能会在1ns内完成,此时两个时刻就是相等的
+    TimePoint m_End =  std::chrono::system_clock::now();
 };
 
 /**
@@ -214,7 +214,7 @@ public:
     ///启动一个后台任务,返回值是一个与std::packaged_task相关联的future,当传入的函数抛出异常时异常会被保存到future中,因此不会对线程池的while循环造成破坏
     ///对future调用get()等同于同步执行任务,当前线程会阻塞直到后台任务完成并获取返回值
     ///不对future调用get()等同于异步执行任务,当前线程会继续向下执行并忽视返回值
-    template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename FunctionTraits<Func>::ReturnType>
+    template<Distribution Mode = Ordered,typename Func,typename...Args,typename ReturnType = typename MetaUtility::FunctionTraits<Func>::ReturnType>
     std::future<ReturnType> run(Func func,Args&&...args)
     {
         //1.检测是否存在新的被占用的线程
