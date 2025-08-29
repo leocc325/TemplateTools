@@ -30,7 +30,7 @@ FunctionWrapper::FunctionPrivate::FunctionPrivate(FunctionWrapper::FunctionPriva
 FunctionWrapper::FunctionPrivate &FunctionWrapper::FunctionPrivate::operator =(const FunctionWrapper::FunctionPrivate &other)
 {
     //使用赋值运算符时需要先判断两个对象内部数据(返回值和参数包)类型是否一致,不一致的情况下需要先回收被赋值对象的内存，再重新分配内存并赋值
-    if(*this != other)
+    if(*this != other && deleteHelper)
         deleteHelper(this->result,this->argsTuple);
 
     this->copyImpl(other);
