@@ -8,7 +8,7 @@ ThreadPool是一个动态的线程池,可以根据当前线程池状态自动拓
 #### 1.构造函数ThreadPool(unsigned size = 0)
 初始化一个大小为size的线程池,当size = 0时,线程池大小为CPU核心支持的最大线程数量,在默认状态下,线程池大小不会超过CPU核心数。<br />
 
-### 2.成员函数template<Distribution Mode = Ordered,typename Func,typename...Args> std::future<ReturnType> run(Func func,Args&&...args)
+#### 2.成员函数template<Distribution Mode = Ordered,typename Func,typename...Args> std::future<ReturnType> run(Func func,Args&&...args)
 添加一个可执行任务,模板参数Mode表明添加策略:Ordered(按顺序添加)、Balanced(均衡线程池任务)。
 ```c++
 void func(int a,double b){
@@ -27,6 +27,9 @@ p2.run<Balanced>(func,40,50);
 p2.run<Balanced>(func,50,60);
 p2.run<Balanced>(func,60,70);
 ```
+
+#### 3.成员函数waitforDone()
+等待当前线程池中的任务全部完成。
 
 ## 二：ThreadPool原理
 
