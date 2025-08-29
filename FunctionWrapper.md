@@ -167,5 +167,43 @@ funcC.execString(args);
 ## 二：一个完整的示例。
 
 ```c++
+inline void funcwrapperTest()
+{
+    FunctionWrapper funcA;//创建一个空的函数包装器
+    funcA.exec();//输出:Dn  error:functor is empty,excute failed
 
+    FunctionWrapper funcB(add);//创建一个add(double,int)的函数包装器,但是不指定初始参数
+    funcB.exec();//输出:PFdidE  error:no parameter has been setted,excute failed
+
+    funcB.setArgs(10,10.5);//将funcB的函数参数设置为10和10.5
+    funcB.exec();//输出:double add(int, double)10 10.5
+
+    funcA = funcB;//将funcB的状态赋值给空包装器funcA   ##1
+    funcB.exec(6,1.25);//重新设置funcB的参数并执行,输出:double add(int, double)6 1.25
+    funcA.exec();//执行funcA,输出:double add(int, double)10 10.5  ,说明此时funcA的状态等价于##1时funcB的状态
+
+    funcA.exec(20,1.5);//重新设置funcA的参数并执行,输出:double add(int, double)20 1.5
+    funcA.exec();//再次执行funcA,由于没有重新设置参数,所以输出依然为:double add(int, double)20 1.5
+
+    //创建一个成员函数的包装器,但是不指定初始函数参数
+    Object obj;
+    FunctionWrapper funcC(&Object::subtract,&obj);
+
+    funcC.exec();//未设置参数,所以输出:error:no parameter has been setted,excute failed
+    try {
+        funcC.exec(10,10); //参数类型不匹配,抛出异常,这里参数被推导为int,int  但是函数所需参数为double,int
+    } catch (std::exception& e){
+        std::cout<<e.what()<<std::endl<<std::flush;    //输出:error:Argument type or number mismatch
+    }
+    funcC.exec(double(10),10);//显示指定参数类型并执行,输出:double Object::subtract(double, int)10 10
+
+    double retsult = funcC.getResult<double>();//result = 10;
+
+    //再次尝试获取返回值,但是指定一个错误类型
+    try {
+        retsult = funcC.getResult<float>();
+    } catch (std::exception& e){
+        std::cout<<e.what()<<std::endl<<std::flush;    //输出:error:return value type mismatch
+    }
+}
 ```
